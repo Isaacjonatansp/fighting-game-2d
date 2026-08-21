@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fighting Game 2D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: linear-gradient(180deg, #1A0307 0%, #2B050B 25%, #360A11 50%, #4A0E17 75%, #5A121C 100%);
+      min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      color: #F5F5F7;
+      overflow: hidden;
+    }
+    #game-container { width: 100vw; height: 100vh; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .health-bar-container { 
+      position: absolute; top: 40px; height: 24px; 
+      background: rgba(26, 3, 7, 0.8);
+      border: 2px solid #D4AF37;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(212, 175, 55, 0.3), inset 0 2px 10px rgba(0,0,0,0.5);
+    }
+    .health-bar-fill { 
+      height: 100%; 
+      background: linear-gradient(90deg, #D4AF37 0%, #C9A961 50%, #B8985C 100%);
+      border-radius: 10px;
+      transition: width 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      box-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+    }
+    .stamina-bar-container {
+      position: absolute; top: 68px; height: 8px;
+      background: rgba(26, 3, 7, 0.8);
+      border: 1px solid rgba(212, 175, 55, 0.65);
+      overflow: hidden;
+    }
+    .stamina-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4FC3F7, #80DEEA, #E0F7FA);
+      transition: width 120ms linear;
+      box-shadow: 0 0 10px rgba(128, 222, 234, 0.8);
+    }
+    #p1-stamina, #p1-health + .stamina-bar-container { left: 40px; width: 320px; }
+    #p2-stamina, #p2-health + .stamina-bar-container { right: 40px; width: 320px; }
+    .health-bar-label {
+      position: absolute; top: -28px; left: 8px;
+      font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.15em;
+      color: #D4AF37; text-transform: uppercase;
+    }
+    #p1-health { left: 40px; width: 320px; }
+    #p2-health { right: 40px; width: 320px; text-align: right; }
+    #p2-health .health-bar-label { left: auto; right: 8px; }
+    #timer { 
+      position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+      font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700;
+      color: #EAE6DF; text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+    }
+    .round-counter {
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px;
+    }
+    .round-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #360A11; border: 2px solid #D4AF37;
+      transition: all 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .round-dot.won { background: #D4AF37; box-shadow: 0 0 10px rgba(212, 175, 55, 0.8); }
+    #match-over {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; opacity: 0; pointer-events: none;
+      transition: opacity 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    #match-over.visible { opacity: 1; pointer-events: auto; }
+    #match-over h1 {
+      font-family: 'Cinzel', serif; font-size: 64px; font-weight: 900;
+      color: #D4AF37; letter-spacing: 0.1em;
+      text-shadow: 0 0 40px rgba(212, 175, 55, 0.8);
+      margin-bottom: 16px;
+    }
+    #match-over p {
+      font-family: 'Cormorant Garamond', serif; font-size: 24px; font-style: italic;
+      color: #EAE6DF; margin-bottom: 32px;
+    }
+    #match-over button {
+      font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 0.1em;
+      padding: 16px 48px; background: transparent; border: 2px solid #D4AF37;
+      color: #D4AF37; cursor: pointer; position: relative; overflow: hidden;
+      transition: all 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    #match-over button::before {
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 0; height: 0; background: radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%);
+      border-radius: 50%; transition: width 400ms, height 400ms;
+    }
+    #match-over button:hover { color: #1A0307; }
+    #match-over button:hover::before { width: 300px; height: 300px; }
+    .combo-counter {
+      position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+      font-family: 'Cinzel', serif; font-size: 32px; font-weight: 700;
+      color: #D4AF37; opacity: 0; pointer-events: none;
+      text-shadow: 0 0 20px rgba(212, 175, 55, 0.8);
+      transition: opacity 200ms;
+    }
+    .combo-counter.visible { opacity: 1; }
+    .controls-hint {
+      position: absolute; top: 108px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 32px; font-size: 12px; color: #A89F94;
+      font-family: 'Inter', sans-serif;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .control-key {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 36px; height: 36px; padding: 0 8px;
+      background: rgba(26, 3, 7, 0.8); border: 1px solid #D4AF37;
+      border-radius: 6px; font-family: 'Cinzel', serif; font-size: 11px;
+      color: #D4AF37;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-overlay">
+      <div id="p1-health" class="health-bar-container">
+        <span class="health-bar-label">Player 1</span>
+        <div class="health-bar-fill" id="p1-health-fill" style="width: 100%"></div>
+      </div>
+      <div id="p2-health" class="health-bar-container">
+        <span class="health-bar-label">Player 2</span>
+        <div class="health-bar-fill" id="p2-health-fill" style="width: 100%"></div>
+      </div>
+      <div id="p1-stamina" class="stamina-bar-container">
+        <div class="stamina-bar-fill" id="p1-stamina-fill" style="width: 100%"></div>
+      </div>
+      <div id="p2-stamina" class="stamina-bar-container">
+        <div class="stamina-bar-fill" id="p2-stamina-fill" style="width: 100%"></div>
+      </div>
+      <div id="timer">99</div>
+      <div class="round-counter" id="round-counter">
+        <div class="round-dot" data-player="1"></div>
+        <div class="round-dot" data-player="1"></div>
+        <div class="round-dot" data-player="2"></div>
+        <div class="round-dot" data-player="2"></div>
+      </div>
+      <div id="match-over">
+        <h1 id="winner-text">PLAYER 1 WINS</h1>
+        <p>Round Complete</p>
+        <button id="restart-btn">Rematch</button>
+      </div>
+      <div class="combo-counter" id="combo-counter">0 HIT COMBO</div>
+      <div class="controls-hint">
+        <div class="control-group">
+          <span>PLAYER 1 / CAPOEIRA</span>
+          <div style="display:flex;gap:4px;">
+            <span class="control-key">W</span><span class="control-key">A</span><span class="control-key">S</span><span class="control-key">D</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <span class="control-key">J</span><span class="control-key">K</span><span class="control-key">L</span>
+          </div>
+          <span style="font-size:10px;">Move / Light / Heavy / Special</span>
+          <span style="font-size:10px;">Space: Dash / Shift: Block</span>
+        </div>
+        <div class="control-group">
+          <span>PLAYER 2 / KYOKUSHIN</span>
+          <div style="display:flex;gap:4px;">
+            <span class="control-key">↑</span><span class="control-key">←</span><span class="control-key">↓</span><span class="control-key">→</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <span class="control-key">1</span><span class="control-key">2</span><span class="control-key">3</span>
+          </div>
+          <span style="font-size:10px;">Move / Light / Heavy / Special</span>
+          <span style="font-size:10px;">Numpad 0: Dash / Right Shift: Block</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
