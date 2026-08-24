@@ -71,12 +71,15 @@ export class Fighter {
     this.onGround = true;
     this.canDoubleJump = true;
     this.state = 'idle';
+    this.animFrame = 0;
     this.hitStun = 0;
     this.invincible = false;
     this.dashTimer = 0;
     this.dashCooldown = 0;
     this.hitbox = null;
     this.hitboxActive = false;
+    this.hitLanded = false;
+    this.currentAttack = null;
     this.comboStep = 0;
     this.comboType = null;
     this.lastAttackTime = 0;
@@ -286,11 +289,11 @@ export class Fighter {
 
   startDash(direction) {
     this.facing = direction === 0 ? this.facing : Math.sign(direction);
-    // Short, sharp burst: fast enough to surprise, but not a full-screen teleport.
-    this.velocityX = this.facing * (this.character === 'crimson' ? 14 : 13);
+    // Longer dash with more distance
+    this.velocityX = this.facing * (this.character === 'crimson' ? 22 : 20);
     this.velocityY = 0;
-    this.dashTimer = 0.16;
-    this.dashCooldown = 0.45;
+    this.dashTimer = 0.25;
+    this.dashCooldown = 0.5;
     this.invincible = true;
     this.setState('dash');
     this.isDashing = true;

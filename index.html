@@ -73,10 +73,10 @@
     .round-dot.won { background: #D4AF37; box-shadow: 0 0 10px rgba(212, 175, 55, 0.8); }
     #match-over {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      text-align: center; opacity: 0; pointer-events: none;
+      text-align: center; opacity: 0; pointer-events: none; display: none;
       transition: opacity 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
-    #match-over.visible { opacity: 1; pointer-events: auto; }
+    #match-over.visible { opacity: 1; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; }
     #match-over h1 {
       font-family: 'Cinzel', serif; font-size: 64px; font-weight: 900;
       color: #D4AF37; letter-spacing: 0.1em;

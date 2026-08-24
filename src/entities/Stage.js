@@ -8,9 +8,6 @@ export class Stage {
   
   setRenderer(renderer) {
     this.renderer = renderer;
-    if (renderer && renderer.buildStage) {
-      renderer.buildStage();
-    }
   }
   
   render(ctx, renderer) {
