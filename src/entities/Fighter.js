@@ -40,6 +40,9 @@ export class Fighter {
     this.comboType = null;
     this.lastAttackTime = 0;
     this.damageMultiplier = 1;
+    this.attackProgress = 0; // Track attack animation progress (0-1)
+    this.attackDuration = 0; // Total duration of current attack
+    this.attackElapsed = 0; // Time elapsed in current attack
     
     this.hurtbox = { x: this.x, y: this.y, width: this.width, height: this.height };
     
@@ -277,6 +280,9 @@ export class Fighter {
     this.hitLanded = false;
     this.velocityX = 0; // Stop movement during attack
     this.isAttacking = true;
+    this.attackProgress = 0;
+    this.attackElapsed = 0;
+    this.attackDuration = attack.startup + attack.active + attack.recovery;
     return true;
   }
 
@@ -319,6 +325,11 @@ export class Fighter {
       return;
     }
     
+    const totalDuration = attack.startup + attack.active + attack.recovery;
+    this.attackDuration = totalDuration;
+    this.attackElapsed += dt;
+    this.attackProgress = Math.min(1, this.attackElapsed / totalDuration);
+    
     // Check attack phases
     if (this.animFrame < attack.startup) {
       // Startup
@@ -339,6 +350,9 @@ export class Fighter {
       this.currentAttack = null;
       this.hitLanded = false;
       this.isAttacking = false;
+      this.attackProgress = 0;
+      this.attackElapsed = 0;
+      this.attackDuration = 0;
       
       // Reset combo if too much time passed
       const now = performance.now();

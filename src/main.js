@@ -72,6 +72,10 @@ const game = new Game({
   combatSystem
 });
 
+// Set game reference on fighters for physics access to stage
+fighter1.game = game;
+fighter2.game = game;
+
 // Set renderer reference for camera
 renderer.game = game;
 

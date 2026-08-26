@@ -1,7 +1,7 @@
 {
-  "name": "fighting-game-2d",
+  "name": "fighting-game-pixelart",
   "version": "1.0.0",
-  "description": "2D Fighting Game like Super Smash Bros / Tekken / Mortal Kombat",
+  "description": "Pixel Art Fighting Game - 2D Fighting Mechanics with Kenney Assets",
   "main": "src/main.js",
   "scripts": {
     "dev": "vite",

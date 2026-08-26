@@ -85,7 +85,18 @@ export class CombatSystem {
     }
     
     // Visual effects
-    this.spawnHitEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, attacker.currentAttack.type);
+    this.spawnHitEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, attacker.currentAttack.type, attacker.character);
+    
+    // Screen shake on hit
+    if (window.game && window.game.renderer) {
+      const shakeIntensity = attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special') ? 15 : 8;
+      window.game.renderer.shakeCamera(shakeIntensity, 250);
+      
+      // Screen flash for heavy/special
+      if (attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special')) {
+        window.game.renderer.flashScreen('#FFFFFF', 120);
+      }
+    }
   }
   
   onBlock(attacker, defender) {
@@ -100,51 +111,68 @@ export class CombatSystem {
     attacker.velocityX = -1 * direction;
     
     // Visual effects
-    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2);
+    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, defender.character);
+    
+    // Subtle screen shake on block
+    if (window.game && window.game.renderer) {
+      window.game.renderer.shakeCamera(4, 100);
+    }
   }
   
-  spawnHitEffect(x, y, attackType) {
+  spawnHitEffect(x, y, attackType, attackerStyle) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
+    const isCapoeira = attackerStyle === 'crimson';
     
-    // Particles
-    const particleCount = attackType === 'heavy' || attackType === 'special' ? 15 : 8;
-    const color = attackType === 'special' ? '#FF00FF' : '#FFD700';
+    // Particles - different colors per style
+    const particleCount = attackType === 'heavy' || attackType === 'special' ? 18 : 10;
+    const color = isCapoeira ? '#FF6600' : '#4488FF';
+    const secondaryColor = isCapoeira ? '#FFCC00' : '#88CCFF';
     
     for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const speed = 2 + Math.random() * 3;
+      const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.5;
+      const speed = 3 + Math.random() * 4;
       renderer.addParticle(
-        x, y, color,
-        { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-        300 + Math.random() * 200
+        x, y, i % 2 === 0 ? color : secondaryColor,
+        { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed - 2 },
+        400 + Math.random() * 300,
+        3 + Math.random() * 3
       );
     }
     
-    // Screen shake
-    const shakeIntensity = attackType === 'heavy' ? 12 : attackType === 'special' ? 18 : 6;
-    renderer.shakeCamera(shakeIntensity, 200);
-    
-    // Screen flash
-    if (attackType === 'heavy' || attackType === 'special') {
-      renderer.flashScreen('#FFFFFF', 100);
+    // Impact ring
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        if (renderer && renderer.addParticle) {
+          renderer.addParticle(
+            x, y, i % 2 === 0 ? color : secondaryColor,
+            { x: 0, y: 0 },
+            200,
+            8 + i * 4
+          );
+        }
+      }, i * 30);
     }
   }
   
-  spawnBlockEffect(x, y) {
+spawnBlockEffect(x, y, defenderStyle) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
+    const isCapoeira = defenderStyle === 'crimson';
+    const color = isCapoeira ? '#FF6600' : '#4488FF';
+    const secondaryColor = isCapoeira ? '#FFCC00' : '#88CCFF';
     
-    // Blue particles
-    for (let i = 0; i < 5; i++) {
+    // Style-specific block particles
+    for (let i = 0; i < 6; i++) {
       const angle = Math.PI + (Math.random() - 0.5) * Math.PI / 2;
-      const speed = 1 + Math.random() * 2;
+      const speed = 1.5 + Math.random() * 2.5;
       renderer.addParticle(
-        x, y, '#4488FF',
+        x, y, i % 2 === 0 ? color : secondaryColor,
         { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-        200 + Math.random() * 100
+        250 + Math.random() * 150,
+        2 + Math.random() * 2
       );
     }
     

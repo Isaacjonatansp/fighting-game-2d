@@ -25,15 +25,33 @@ export class PhysicsEngine {
     fighter.x += fighter.velocityX;
     fighter.y += fighter.velocityY;
     
-    // Ground collision
-    if (fighter.y >= this.groundY - fighter.height) {
-      fighter.y = this.groundY - fighter.height;
-      fighter.velocityY = 0;
-      fighter.onGround = true;
-      fighter.canDoubleJump = true; // Reset double jump on landing
-      if (fighter.state === 'jump' || fighter.state === 'doubleJump') fighter.state = 'idle';
-    } else {
-      fighter.onGround = false;
+    // Platform and Ground collision
+    let landed = false;
+    const stage = fighter.game?.stage;
+    
+    if (stage) {
+      const platform = stage.getPlatformAt(fighter.x, fighter.y, fighter.width, fighter.height);
+      // Only land if falling down
+      if (platform && fighter.velocityY >= 0) {
+        fighter.y = platform.y - fighter.height;
+        fighter.velocityY = 0;
+        fighter.onGround = true;
+        fighter.canDoubleJump = true;
+        if (fighter.state === 'jump' || fighter.state === 'doubleJump') fighter.state = 'idle';
+        landed = true;
+      }
+    }
+    
+    if (!landed) {
+      if (fighter.y >= this.groundY - fighter.height) {
+        fighter.y = this.groundY - fighter.height;
+        fighter.velocityY = 0;
+        fighter.onGround = true;
+        fighter.canDoubleJump = true; // Reset double jump on landing
+        if (fighter.state === 'jump' || fighter.state === 'doubleJump') fighter.state = 'idle';
+      } else {
+        fighter.onGround = false;
+      }
     }
     
     // Wall collision
