@@ -84,17 +84,26 @@ export class CombatSystem {
       window.game.registerHit(attacker.id, damage);
     }
     
-    // Visual effects
-    this.spawnHitEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, attacker.currentAttack.type, attacker.character);
+    // Visual effects - character-styled attack effects
+    const attackType = attacker.currentAttack ? attacker.currentAttack.type : 'attack';
+    const attackerColor = attacker.color || (attacker.character === 'Shinobi' ? '#00E5FF' : '#FF3D00');
+    const attackerChar = attacker.character || (attacker.id === 1 ? 'Shinobi' : 'Samurai');
+    const defenderX = defender.x + defender.width / 2;
+    const defenderY = defender.y + defender.height / 2;
+    const attackKey = attacker.state || 'attack';
+    const comboStep = attacker.comboStep || 1;
+    
+    this.spawnHitEffect(defenderX, defenderY, attackType, attackerColor, attacker.velocityX, attackerChar, attacker.facing, attackKey, comboStep);
     
     // Screen shake on hit
     if (window.game && window.game.renderer) {
-      const shakeIntensity = attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special') ? 15 : 8;
-      window.game.renderer.shakeCamera(shakeIntensity, 250);
+      const isHeavy = attackType === 'heavy' || attackType === 'special';
+      const shakeIntensity = isHeavy ? 14 : 7;
+      window.game.renderer.shakeCamera(shakeIntensity, isHeavy ? 240 : 150);
       
       // Screen flash for heavy/special
-      if (attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special')) {
-        window.game.renderer.flashScreen('#FFFFFF', 120);
+      if (isHeavy) {
+        window.game.renderer.flashScreen(attackerChar === 'Shinobi' ? '#00E5FF' : '#FF3D00', 100);
       }
     }
   }
@@ -111,7 +120,9 @@ export class CombatSystem {
     attacker.velocityX = -1 * direction;
     
     // Visual effects
-    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, defender.character);
+    const defenderColor = defender.color || (defender.character === 'Shinobi' ? '#00E5FF' : '#FF3D00');
+    const defenderChar = defender.character || (defender.id === 1 ? 'Shinobi' : 'Samurai');
+    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, defenderColor, defenderChar, defender.facing);
     
     // Subtle screen shake on block
     if (window.game && window.game.renderer) {
@@ -119,65 +130,70 @@ export class CombatSystem {
     }
   }
   
-  spawnHitEffect(x, y, attackType, attackerStyle) {
+  spawnHitEffect(x, y, attackType, attackerColor, attackerVelocityX = 0, attackerChar = 'Shinobi', facing = 1, attackKey = 'attack', comboStep = 1) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
-    const isCapoeira = attackerStyle === 'crimson';
-    
-    // Particles - different colors per style
-    const particleCount = attackType === 'heavy' || attackType === 'special' ? 18 : 10;
-    const color = isCapoeira ? '#FF6600' : '#4488FF';
-    const secondaryColor = isCapoeira ? '#FFCC00' : '#88CCFF';
-    
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.5;
-      const speed = 3 + Math.random() * 4;
-      renderer.addParticle(
-        x, y, i % 2 === 0 ? color : secondaryColor,
-        { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed - 2 },
-        400 + Math.random() * 300,
-        3 + Math.random() * 3
-      );
+    if (renderer.spawnCharacterHitEffect) {
+      renderer.spawnCharacterHitEffect(x, y, attackType, attackerColor, attackerVelocityX, attackerChar, facing, attackKey, comboStep);
+      return;
     }
     
-    // Impact ring
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => {
-        if (renderer && renderer.addParticle) {
-          renderer.addParticle(
-            x, y, i % 2 === 0 ? color : secondaryColor,
-            { x: 0, y: 0 },
-            200,
-            8 + i * 4
-          );
-        }
-      }, i * 30);
+    const isHeavy = attackType === 'heavy' || attackType === 'special';
+    const primaryColor = attackerColor;
+    const secondaryColor = this.lightenColor(attackerColor, 40);
+    const sparkColor = '#FFFFFF';
+    const particleCount = isHeavy ? 35 : 18;
+    
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+      const speed = isHeavy ? (7 + Math.random() * 10) : (4 + Math.random() * 6);
+      const size = isHeavy ? (4 + Math.random() * 4) : (2 + Math.random() * 3);
+      const life = isHeavy ? (0.6 + Math.random() * 0.4) : (0.4 + Math.random() * 0.3);
+      const vx = Math.cos(angle) * speed * 35;
+      const vy = Math.sin(angle) * speed * 35 - 40;
+      
+      renderer.addParticle(
+        x, y, 
+        i % 3 === 0 ? sparkColor : (i % 2 === 0 ? primaryColor : secondaryColor),
+        { x: vx, y: vy },
+        life,
+        size
+      );
     }
   }
   
-spawnBlockEffect(x, y, defenderStyle) {
+  // Helper to lighten a hex color
+  lightenColor(hex, percent) {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.min(255, (num >> 16) + amt);
+    const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+    const B = Math.min(255, (num & 0x0000FF) + amt);
+    return '#' + (0x1000000 + (R << 16) + (G << 8) + B).toString(16).slice(1);
+  }
+  
+  spawnBlockEffect(x, y, defenderColor, defenderChar = 'Shinobi', facing = 1) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
-    const isCapoeira = defenderStyle === 'crimson';
-    const color = isCapoeira ? '#FF6600' : '#4488FF';
-    const secondaryColor = isCapoeira ? '#FFCC00' : '#88CCFF';
-    
-    // Style-specific block particles
-    for (let i = 0; i < 6; i++) {
-      const angle = Math.PI + (Math.random() - 0.5) * Math.PI / 2;
-      const speed = 1.5 + Math.random() * 2.5;
-      renderer.addParticle(
-        x, y, i % 2 === 0 ? color : secondaryColor,
-        { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-        250 + Math.random() * 150,
-        2 + Math.random() * 2
-      );
+    if (renderer.spawnCharacterBlockEffect) {
+      renderer.spawnCharacterBlockEffect(x, y, defenderColor, defenderChar, facing);
+      return;
     }
     
-    // Small shake
-    renderer.shakeCamera(3, 100);
+    const primaryColor = defenderColor || '#00E5FF';
+    for (let i = 0; i < 14; i++) {
+      const angle = (facing > 0 ? Math.PI : 0) + (Math.random() - 0.5) * Math.PI * 0.6;
+      const speed = 5 + Math.random() * 8;
+      renderer.addParticle(
+        x, y, i % 2 === 0 ? primaryColor : '#FFFFFF',
+        { x: Math.cos(angle) * speed * 30, y: Math.sin(angle) * speed * 30 - 30 },
+        0.3 + Math.random() * 0.2,
+        3 + Math.random() * 3
+      );
+    }
+    renderer.shakeCamera(5, 120);
   }
   
   // Attack definitions

@@ -1,346 +1,299 @@
-// Stage entity - handles 3D arena
+// Stage entity - CraftPix Rocks themed arena
 export class Stage {
   constructor(config) {
     this.config = config;
     this.groundY = config.groundY;
     this.renderer = null;
-    
-    // Arena width - make it very wide so camera never shows edge
+
+    // Arena width - very wide so camera never shows edge
     this.arenaWidth = 5000;
     this.arenaLeft = -2000;
     this.arenaRight = this.arenaLeft + this.arenaWidth;
-    
+
+    // Loaded rock sprites cache
+    this.rocks = {};
+    this.rocksLoaded = false;
+
     // Platforms that fighters can stand on (x, y, width, height)
     // y is top of platform
     this.platforms = [
       // Main ground
       { x: this.arenaLeft, y: this.groundY, width: this.arenaWidth, height: 20, isGround: true },
-      
+
       // Left side platforms
-      { x: 100, y: this.groundY - 120, width: 180, height: 20 },
-      { x: 200, y: this.groundY - 200, width: 140, height: 20 },
-      
+      { x: 80, y: this.groundY - 130, width: 200, height: 22 },
+      { x: 200, y: this.groundY - 240, width: 160, height: 22 },
+
       // Center platforms
-      { x: 320, y: this.groundY - 100, width: 240, height: 20 },
-      { x: 480, y: this.groundY - 40, width: 320, height: 20 }, // wooden bridge
-      
+      { x: 380, y: this.groundY - 110, width: 240, height: 22 },
+      { x: 520, y: this.groundY - 200, width: 240, height: 22 },
+
       // Right side platforms
-      { x: this.config.width - 560, y: this.groundY - 140, width: 240, height: 20 },
-      { x: this.config.width - 340, y: this.groundY - 240, width: 140, height: 20 },
-      { x: this.config.width - 280, y: this.groundY - 160, width: 180, height: 20 },
+      { x: this.config.width - 280, y: this.groundY - 130, width: 200, height: 22 },
+      { x: this.config.width - 360, y: this.groundY - 240, width: 160, height: 22 },
     ];
   }
-  
+
   setRenderer(renderer) {
     this.renderer = renderer;
   }
-  
+
+  // Load all rock sprites from CraftPix pack
+  async loadRocks() {
+    const basePath = '/assets/rocks';
+    const rockCategories = {
+      canyon_rocks: ['canyon_rock1', 'canyon_rock2', 'canyon_rock3', 'canyon_rock4', 'canyon_rock5'],
+      desert_rocks: ['desert_rock1', 'desert_rock2', 'desert_rock3', 'desert_rock4', 'desert_rock5'],
+      ice_rock: ['ice_rock1', 'ice_rock2', 'ice_rock3', 'ice_rock4', 'ice_rock5'],
+      cave_rocks: ['cave_rock1', 'cave_rock2', 'cave_rock3', 'cave_rock4', 'cave_rock5'],
+      snowy_rocks1: ['snowy_rock1', 'snowy_rock2', 'snowy_rock3', 'snowy_rock4', 'snowy_rock5'],
+      middle_lane_rocks1: ['middle_lane_rock1_1', 'middle_lane_rock1_2', 'middle_lane_rock1_3', 'middle_lane_rock1_4', 'middle_lane_rock1_5'],
+      middle_lane_rocks2: ['middle_lane_rock2_1', 'middle_lane_rock2_2', 'middle_lane_rock2_3', 'middle_lane_rock2_4', 'middle_lane_rock2_5'],
+      stalagmites: ['stalagmite1', 'stalagmite2', 'stalagmite3', 'stalagmite4', 'stalagmite5']
+    };
+
+    for (const [category, files] of Object.entries(rockCategories)) {
+      this.rocks[category] = [];
+      for (const fileName of files) {
+        try {
+          const img = await this.loadImage(`${basePath}/${category}/${fileName}.png`);
+          this.rocks[category].push(img);
+        } catch (err) {
+          console.warn(`Failed to load rock: ${fileName}`, err);
+        }
+      }
+    }
+    this.rocksLoaded = true;
+    console.log('CraftPix rocks loaded');
+  }
+
+  loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load: ${src}`));
+      img.src = src;
+    });
+  }
+
   // Get platform at position for collision
   getPlatformAt(x, y, width, height) {
     const fighterBottom = y + height;
     const fighterLeft = x;
     const fighterRight = x + width;
-    
+
     for (const platform of this.platforms) {
       const platLeft = platform.x;
       const platRight = platform.x + platform.width;
       const platTop = platform.y;
       const platBottom = platform.y + platform.height;
-      
+
       // Check horizontal overlap
       if (fighterRight > platLeft && fighterLeft < platRight) {
         // Check if fighter is landing on top of platform
-        if (fighterBottom >= platTop - 5 && fighterBottom <= platTop + 10) {
+        if (fighterBottom >= platTop - 8 && fighterBottom <= platTop + 12) {
           return platform;
         }
       }
     }
     return null;
   }
-  
+
   render(ctx, renderer) {
     ctx.save();
-    
-    // === KENNEY-INSPIRED BLOCKY ARENA - FULL WIDTH ===
-    
-    // Background sky gradient - extend far left/right
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, this.groundY);
-    skyGradient.addColorStop(0, '#87CEEB');
-    skyGradient.addColorStop(0.5, '#B0E0E6');
-    skyGradient.addColorStop(1, '#E0F6FF');
+
+    // === CRAFTPIX ROCKS ARENA ===
+
+    // Background sky gradient - fill ENTIRE canvas height
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, this.config.height);
+    skyGradient.addColorStop(0, '#2C1810');
+    skyGradient.addColorStop(0.4, '#5C3A1E');
+    skyGradient.addColorStop(0.8, '#8B5A2B');
+    skyGradient.addColorStop(1, '#1A0F0A');
     ctx.fillStyle = skyGradient;
-    ctx.fillRect(this.arenaLeft, 0, this.arenaWidth, this.groundY);
-    
-    // Distant mountains (parallax layers) - extended
-    this.drawMountains(ctx, this.arenaLeft, this.groundY - 180, '#6B8E5C', 0.1);
-    this.drawMountains(ctx, this.arenaLeft, this.groundY - 140, '#8FBC8F', 0.2);
-    this.drawMountains(ctx, this.arenaLeft, this.groundY - 100, '#A8D5BA', 0.3);
-    
-    // Clouds - extended
-    this.drawCloudsExtended(ctx);
-    
-    // Ground with grass and dirt layers - extended
-    ctx.fillStyle = '#2D5016';
+    ctx.fillRect(this.arenaLeft, 0, this.arenaWidth, this.config.height);
+
+    // Distant mountain silhouettes
+    this.drawMountains(ctx, this.arenaLeft, this.groundY - 180, '#3A2418', 0.1);
+    this.drawMountains(ctx, this.arenaLeft, this.groundY - 140, '#5C3A1E', 0.2);
+    this.drawMountains(ctx, this.arenaLeft, this.groundY - 100, '#8B5A2B', 0.3);
+
+    // Dust particles in air
+    this.drawDustParticles(ctx);
+
+    // Ground floor - dark cavern rock (drawn on top of gradient)
+    ctx.fillStyle = '#2C1810';
     ctx.fillRect(this.arenaLeft, this.groundY, this.arenaWidth, 20);
-    ctx.fillStyle = '#8B7355';
+    ctx.fillStyle = '#1A0F0A';
     ctx.fillRect(this.arenaLeft, this.groundY + 20, this.arenaWidth, this.config.height - this.groundY - 20);
-    
-    // Grass tufts pattern on top - extended
-    ctx.fillStyle = '#4CAF50';
-    for (let x = this.arenaLeft; x < this.arenaLeft + this.arenaWidth; x += 16) {
-      ctx.fillRect(x, this.groundY - 4, 8, 4);
-      ctx.fillRect(x + 8, this.groundY - 2, 8, 2);
-    }
-    
-    // Draw all platforms
+
+    // Draw all platforms using rock sprites
     for (const platform of this.platforms) {
-      if (platform.isGround) continue; // Skip main ground, it's drawn above
-      
-      // Determine if it's wooden bridge or stone
-      const isWooden = platform.width === 320 && platform.y === this.groundY - 40;
-      if (isWooden) {
-        this.drawWoodenBridge(ctx, platform.x, platform.y, platform.width, platform.height, renderer);
-      } else {
-        this.drawStoneBlock(ctx, platform.x, platform.y - platform.height, platform.width, platform.height, renderer);
-      }
+      if (platform.isGround) continue; // Skip main ground
+      this.drawRockPlatform(ctx, platform.x, platform.y, platform.width, platform.height);
     }
-    
-    // Decorative pillars and structures
-    if (renderer && renderer.drawPixelRect) {
-      // Stone pillar left
-      this.drawStonePillar(ctx, 80, this.groundY - 280, renderer);
-      // Stone pillar right
-      this.drawStonePillar(ctx, this.config.width - 80, this.groundY - 280, renderer);
-      
-      // Torches on left side
-      this.drawKenneyTorch(ctx, 60, this.groundY - 320, renderer);
-      this.drawKenneyTorch(ctx, 60, this.groundY - 420, renderer);
-      
-      // Torches on right side
-      this.drawKenneyTorch(ctx, this.config.width - 60, this.groundY - 320, renderer);
-      this.drawKenneyTorch(ctx, this.config.width - 60, this.groundY - 420, renderer);
-      
-      // Background castle towers
-      this.drawCastleTower(ctx, 150, this.groundY - 380, renderer);
-      this.drawCastleTower(ctx, this.config.width - 150, this.groundY - 380, renderer);
-      
-      // Flags
-      this.drawFlag(ctx, 200, this.groundY - 380, renderer, true);
-      this.drawFlag(ctx, this.config.width - 200, this.groundY - 380, renderer, false);
-    }
-    
-    // Ground reference line
+
+    // Stalagmites and stalactites for atmosphere
+    this.drawStalagmites(ctx);
+    this.drawStalactites(ctx);
+
+    // Large background rocks
+    this.drawBackgroundRocks(ctx);
+
+    // Scatter small rocks on ground
+    this.drawScatteredRocks(ctx);
+
+    // Ground reference line (gold accent)
     ctx.strokeStyle = '#D4AF37';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(this.arenaLeft, this.groundY);
     ctx.lineTo(this.arenaLeft + this.arenaWidth, this.groundY);
     ctx.stroke();
-    
+
     ctx.restore();
   }
 
-  drawStoneBlock(ctx, x, y, w, h, renderer) {
-    // Main stone block with Kenney-style shading
-    ctx.fillStyle = '#8B7355';
-    ctx.fillRect(x, y, w, h);
-    
-    // Top highlight (light source from top-left)
-    ctx.fillStyle = '#A0826D';
-    ctx.fillRect(x, y, w, 4);
-    
-    // Right shadow
-    ctx.fillStyle = '#5D4E42';
-    ctx.fillRect(x + w - 4, y, 4, h);
-    
+  // Draw platform composed of rock sprites
+  drawRockPlatform(ctx, x, y, width, height) {
+    if (!this.rocksLoaded || !this.rocks.canyon_rocks || this.rocks.canyon_rocks.length === 0) {
+      // Fallback procedural stone
+      ctx.fillStyle = '#5C3A1E';
+      ctx.fillRect(x, y, width, height);
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x, y, width, 4);
+      return;
+    }
+
+    // Draw rocks tiled across platform width
+    const rockSize = 64;
+    const numRocks = Math.ceil(width / rockSize);
+
+    for (let i = 0; i < numRocks; i++) {
+      const rockX = x + i * rockSize;
+      const rock = this.rocks.canyon_rocks[i % this.rocks.canyon_rocks.length];
+      if (rock) {
+        ctx.drawImage(rock, rockX, y - rockSize * 0.3, rockSize, rockSize * 0.6);
+      }
+    }
+
+    // Top edge highlight
+    ctx.fillStyle = 'rgba(212, 175, 55, 0.4)';
+    ctx.fillRect(x, y, width, 2);
+
     // Bottom shadow
-    ctx.fillStyle = '#4A3F38';
-    ctx.fillRect(x, y + h - 4, w, 4);
-    
-    // Left highlight edge
-    ctx.fillStyle = '#B09977';
-    ctx.fillRect(x, y, 3, h);
-    
-    // Grid lines for stone blocks
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.lineWidth = 1;
-    for (let bx = x; bx < x + w; bx += 16) {
-      ctx.beginPath();
-      ctx.moveTo(bx, y);
-      ctx.lineTo(bx, y + h);
-      ctx.stroke();
-    }
-    for (let by = y; by < y + h; by += 16) {
-      ctx.beginPath();
-      ctx.moveTo(x, by);
-      ctx.lineTo(x + w, by);
-      ctx.stroke();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x, y + height - 2, width, 2);
+  }
+
+  // Draw stalagmites pointing up from ground
+  drawStalagmites(ctx) {
+    if (!this.rocksLoaded || !this.rocks.stalagmites) return;
+
+    const positions = [
+      { x: 60, y: this.groundY, scale: 1.0 },
+      { x: 300, y: this.groundY, scale: 0.8 },
+      { x: 580, y: this.groundY, scale: 1.2 },
+      { x: 900, y: this.groundY, scale: 0.9 },
+      { x: 1150, y: this.groundY, scale: 1.1 },
+      { x: 50, y: this.groundY, scale: 0.7 },
+      { x: 350, y: this.groundY, scale: 1.0 },
+      { x: 750, y: this.groundY, scale: 0.85 },
+      { x: 1050, y: this.groundY, scale: 1.05 },
+      { x: 1220, y: this.groundY, scale: 0.75 }
+    ];
+
+    positions.forEach((pos, idx) => {
+      const stalagmite = this.rocks.stalagmites[idx % this.rocks.stalagmites.length];
+      if (stalagmite) {
+        const w = stalagmite.width * pos.scale;
+        const h = stalagmite.height * pos.scale;
+        ctx.drawImage(stalagmite, pos.x - w / 2, pos.y - h, w, h);
+      }
+    });
+  }
+
+  // Draw stalactites hanging from top
+  drawStalactites(ctx) {
+    if (!this.rocksLoaded || !this.rocks.stalagmites) return;
+
+    const positions = [
+      { x: 180, y: 0, scale: 0.9 },
+      { x: 450, y: 0, scale: 1.1 },
+      { x: 700, y: 0, scale: 0.85 },
+      { x: 980, y: 0, scale: 1.0 },
+      { x: 1200, y: 0, scale: 0.95 }
+    ];
+
+    positions.forEach((pos, idx) => {
+      const stalactite = this.rocks.stalagmites[(idx + 2) % this.rocks.stalagmites.length];
+      if (stalactite) {
+        const w = stalactite.width * pos.scale;
+        const h = stalactite.height * pos.scale;
+        ctx.save();
+        ctx.translate(pos.x, pos.y + h);
+        ctx.scale(1, -1); // Flip vertically
+        ctx.drawImage(stalactite, -w / 2, 0, w, h);
+        ctx.restore();
+      }
+    });
+  }
+
+  // Draw large background rocks (parallax decoration)
+  drawBackgroundRocks(ctx) {
+    if (!this.rocksLoaded) return;
+
+    const positions = [
+      { x: 100, y: this.groundY - 380, scale: 2.0, category: 'cave_rocks' },
+      { x: this.config.width - 180, y: this.groundY - 400, scale: 2.2, category: 'cave_rocks' },
+      { x: this.config.width / 2 - 200, y: this.groundY - 360, scale: 1.8, category: 'cave_rocks' },
+      { x: this.config.width / 2 + 150, y: this.groundY - 420, scale: 2.1, category: 'cave_rocks' },
+      { x: 250, y: this.groundY - 520, scale: 1.5, category: 'snowy_rocks1' },
+      { x: this.config.width - 300, y: this.groundY - 540, scale: 1.6, category: 'snowy_rocks1' }
+    ];
+
+    positions.forEach((pos, idx) => {
+      const rockList = this.rocks[pos.category];
+      if (!rockList) return;
+      const rock = rockList[idx % rockList.length];
+      if (rock) {
+        const w = rock.width * pos.scale;
+        const h = rock.height * pos.scale;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.drawImage(rock, pos.x - w / 2, pos.y - h, w, h);
+        ctx.restore();
+      }
+    });
+  }
+
+  // Draw small scattered rocks on ground
+  drawScatteredRocks(ctx) {
+    if (!this.rocksLoaded) return;
+
+    const seed = 12345;
+    for (let i = 0; i < 30; i++) {
+      const x = ((seed * (i + 1) * 7) % this.arenaWidth) + this.arenaLeft;
+      const rockList = this.rocks.desert_rocks || this.rocks.canyon_rocks;
+      if (!rockList || rockList.length === 0) continue;
+      const rock = rockList[i % rockList.length];
+      const scale = 0.4 + ((i * 13) % 100) / 200;
+      const w = rock.width * scale;
+      const h = rock.height * scale;
+      ctx.drawImage(rock, x, this.groundY - h * 0.3, w, h);
     }
   }
-  
-  drawWoodenBridge(ctx, x, y, w, h, renderer) {
-    // Bridge planks
-    ctx.fillStyle = '#8B6F47';
-    ctx.fillRect(x, y, w, h);
-    
-    // Top highlight
-    ctx.fillStyle = '#A0845A';
-    ctx.fillRect(x, y, w, 2);
-    
-    // Planks pattern (vertical lines)
-    ctx.strokeStyle = '#654321';
-    ctx.lineWidth = 2;
-    for (let px = x + 20; px < x + w; px += 20) {
-      ctx.beginPath();
-      ctx.moveTo(px, y);
-      ctx.lineTo(px, y + h);
-      ctx.stroke();
+
+  // Dust particles for atmosphere
+  drawDustParticles(ctx) {
+    const seed = 99999;
+    ctx.fillStyle = 'rgba(212, 175, 55, 0.15)';
+    for (let i = 0; i < 50; i++) {
+      const x = ((seed * (i + 1) * 11) % this.config.width);
+      const y = ((seed * (i + 1) * 17) % (this.groundY - 50));
+      const size = 1 + (i % 3);
+      ctx.fillRect(x, y, size, size);
     }
-    
-    // Wood grain
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.lineWidth = 1;
-    for (let gy = y + 4; gy < y + h; gy += 6) {
-      ctx.beginPath();
-      ctx.moveTo(x, gy);
-      ctx.lineTo(x + w, gy);
-      ctx.stroke();
-    }
-    
-    // Bottom shadow
-    ctx.fillStyle = '#5D4526';
-    ctx.fillRect(x, y + h - 2, w, 2);
-  }
-  
-  drawStonePillar(ctx, x, y, renderer) {
-    const w = 32;
-    const h = 240;
-    
-    // Pillar body
-    ctx.fillStyle = '#8B7355';
-    ctx.fillRect(x - w/2, y, w, h);
-    
-    // Left highlight
-    ctx.fillStyle = '#A0826D';
-    ctx.fillRect(x - w/2, y, 4, h);
-    
-    // Right shadow
-    ctx.fillStyle = '#5D4E42';
-    ctx.fillRect(x + w/2 - 4, y, 4, h);
-    
-    // Stone blocks pattern
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.lineWidth = 1;
-    for (let py = y; py < y + h; py += 16) {
-      ctx.beginPath();
-      ctx.moveTo(x - w/2, py);
-      ctx.lineTo(x + w/2, py);
-      ctx.stroke();
-    }
-    
-    // Pillar top
-    ctx.fillStyle = '#654321';
-    ctx.fillRect(x - w/2 - 8, y - 8, w + 16, 8);
-    ctx.fillStyle = '#8B6F47';
-    ctx.fillRect(x - w/2 - 6, y - 6, w + 12, 6);
-  }
-  
-  drawKenneyTorch(ctx, x, y, renderer) {
-    // Torch pole
-    ctx.fillStyle = '#5D3E1F';
-    ctx.fillRect(x - 3, y, 6, 60);
-    ctx.fillStyle = '#8B5A2B';
-    ctx.fillRect(x - 2, y + 1, 4, 58);
-    
-    // Torch bracket
-    ctx.fillStyle = '#4A3F38';
-    ctx.fillRect(x - 6, y + 8, 12, 4);
-    ctx.fillStyle = '#654321';
-    ctx.fillRect(x - 5, y + 9, 10, 3);
-    
-    // Flame (animated flicker)
-    const flicker = Math.sin(Date.now() * 0.01) * 2;
-    ctx.fillStyle = '#FF6B35';
-    ctx.fillRect(x - 8 + flicker, y - 12, 16, 14);
-    ctx.fillStyle = '#FFA500';
-    ctx.fillRect(x - 6 + flicker, y - 10, 12, 12);
-    ctx.fillStyle = '#FFD700';
-    ctx.fillRect(x - 4 + flicker, y - 6, 8, 8);
-  }
-  
-  drawCastleTower(ctx, x, y, renderer) {
-    const w = 50;
-    const h = 120;
-    
-    // Tower body
-    ctx.fillStyle = '#8B7355';
-    ctx.fillRect(x - w/2, y, w, h);
-    
-    // Left highlight
-    ctx.fillStyle = '#A0826D';
-    ctx.fillRect(x - w/2, y, 3, h);
-    
-    // Right shadow
-    ctx.fillStyle = '#5D4E42';
-    ctx.fillRect(x + w/2 - 3, y, 3, h);
-    
-    // Stone block pattern
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.lineWidth = 1;
-    for (let by = y; by < y + h; by += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x - w/2, by);
-      ctx.lineTo(x + w/2, by);
-      ctx.stroke();
-    }
-    
-    // Crenellations (castle top teeth - merlons only)
-    const crenelW = 8;
-    const crenelH = 16;
-    for (let cx2 = x - w/2 + 4; cx2 < x + w/2; cx2 += crenelW * 2) {
-      // Merlon (raised wall block)
-      ctx.fillStyle = '#8B7355';
-      ctx.fillRect(cx2 + crenelW, y - crenelH, crenelW, crenelH);
-      ctx.fillStyle = '#A0826D';
-      ctx.fillRect(cx2 + crenelW, y - crenelH, 2, crenelH);
-      ctx.fillStyle = '#5D4E42';
-      ctx.fillRect(cx2 + crenelW * 2 - 2, y - crenelH, 2, crenelH);
-    }
-    
-    // Roof/turret top
-    ctx.fillStyle = '#654321';
-    ctx.fillRect(x - w/2 - 6, y - 8, w + 12, 8);
-    ctx.fillStyle = '#8B6F47';
-    ctx.fillRect(x - w/2 - 4, y - 6, w + 8, 6);
-  }
-  
-  drawFlag(ctx, x, y, renderer, isLeft) {
-    // Flagpole
-    ctx.fillStyle = '#5D3E1F';
-    ctx.fillRect(x - 2, y, 4, 80);
-    ctx.fillStyle = '#8B5A2B';
-    ctx.fillRect(x - 1, y + 1, 2, 78);
-    
-    // Flag banner
-    const flagW = 40;
-    const flagH = 24;
-    const flagWave = Math.sin(Date.now() * 0.01) * 4;
-    
-    // Flag cloth
-    ctx.fillStyle = '#E74C3C';
-    ctx.beginPath();
-    ctx.moveTo(x, y + 16);
-    ctx.quadraticCurveTo(x + flagW/2 + flagWave, y + 12, x + flagW, y + 16);
-    ctx.quadraticCurveTo(x + flagW/2 + flagWave, y + 20, x, y + 24);
-    ctx.fill();
-    
-    // Flag highlight
-    ctx.fillStyle = '#FF6B6B';
-    ctx.beginPath();
-    ctx.moveTo(x + 2, y + 17);
-    ctx.quadraticCurveTo(x + flagW/2 + flagWave - 2, y + 14, x + flagW - 2, y + 17);
-    ctx.quadraticCurveTo(x + flagW/2 + flagWave - 2, y + 19, x + 2, y + 22);
-    ctx.fill();
   }
   
   drawMountains(ctx, x, y, color, scale) {

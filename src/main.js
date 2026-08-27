@@ -7,6 +7,9 @@ import { CombatSystem } from './systems/CombatSystem.js';
 import { Fighter } from './entities/Fighter.js';
 import { Stage } from './entities/Stage.js';
 
+// Async init
+(async () => {
+
 // Game configuration
 const CONFIG = {
   canvas: document.getElementById('game-canvas'),
@@ -16,8 +19,8 @@ const CONFIG = {
   groundY: 580,
   roundTime: 99,
   maxRounds: 3,
-  fighterWidth: 60,
-  fighterHeight: 120
+  fighterWidth: 72,
+  fighterHeight: 144
 };
 
 // Initialize systems
@@ -33,9 +36,9 @@ const fighter1 = new Fighter({
   y: CONFIG.groundY - CONFIG.fighterHeight,
   width: CONFIG.fighterWidth,
   height: CONFIG.fighterHeight,
-  color: '#D4AF37',
+  color: '#00E5FF',
   facing: 1,
-  character: 'crimson',
+  character: 'Shinobi',
   controls: {
     left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS',
     light: 'KeyJ', heavy: 'KeyK', special: 'KeyL', dash: 'Space', block: 'ShiftLeft'
@@ -48,9 +51,9 @@ const fighter2 = new Fighter({
   y: CONFIG.groundY - CONFIG.fighterHeight,
   width: CONFIG.fighterWidth,
   height: CONFIG.fighterHeight,
-  color: '#C9A961',
+  color: '#FF3D00',
   facing: -1,
-  character: 'azure',
+  character: 'Samurai',
   controls: {
     left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown',
     light: 'Digit1', heavy: 'Digit2', special: 'Digit3', dash: 'Numpad0', block: 'ShiftRight'
@@ -59,6 +62,9 @@ const fighter2 = new Fighter({
 
 // Create stage
 const stage = new Stage(CONFIG);
+
+// Load CraftPix rock sprites
+await stage.loadRocks();
 
 // Initialize game
 const game = new Game({
@@ -79,10 +85,6 @@ fighter2.game = game;
 // Set renderer reference for camera
 renderer.game = game;
 
-// Assign characters to fighters
-renderer.setCharacter(fighter1, 'crimson');
-renderer.setCharacter(fighter2, 'azure');
-
 // Set renderer on stage
 stage.setRenderer(renderer);
 
@@ -91,3 +93,5 @@ game.start();
 
 // Global reference for debugging
 window.game = game;
+
+})();

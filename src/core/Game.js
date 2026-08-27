@@ -34,10 +34,16 @@ export class Game {
     this.winnerText = document.getElementById('winner-text');
     this.restartBtn = document.getElementById('restart-btn');
     this.comboCounter = document.getElementById('combo-counter');
+    this.p1ScoreEl = document.getElementById('p1-score');
+    this.p2ScoreEl = document.getElementById('p2-score');
     
     this.comboTimer = 0;
     this.lastHitTime = 0;
     this.currentCombo = 0;
+    
+    // Hit pause
+    this.hitPauseTimer = 0;
+    this.hitPauseDuration = 0;
     
     this.setupEventListeners();
     this.resizeCanvas();
@@ -46,6 +52,17 @@ export class Game {
   
   setupEventListeners() {
     this.restartBtn.addEventListener('click', () => this.restartMatch());
+    const quickRestartBtn = document.getElementById('quick-restart-btn');
+    if (quickRestartBtn) {
+      quickRestartBtn.addEventListener('click', () => this.restartMatch());
+    }
+    const controlsToggle = document.getElementById('controls-toggle');
+    const controlsHint = document.getElementById('controls-hint');
+    if (controlsToggle && controlsHint) {
+      controlsToggle.addEventListener('click', () => {
+        controlsHint.classList.toggle('minimized');
+      });
+    }
   }
   
   resizeCanvas() {
@@ -73,6 +90,19 @@ export class Game {
   }
   
   update(dt) {
+    // Handle hit pause
+    if (this.hitPauseTimer > 0) {
+      this.hitPauseTimer -= dt;
+      if (this.hitPauseTimer <= 0) {
+        this.hitPauseTimer = 0;
+      } else {
+        // Skip normal update during hit pause
+        this.renderer.updateCamera(dt);
+        this.renderer.updateParticles(dt);
+        return;
+      }
+    }
+    
     // Update input FIRST - store previous frame state
     this.inputManager.update();
     
@@ -152,6 +182,11 @@ export class Game {
       this.comboCounter.textContent = `${this.currentCombo} HIT COMBO!`;
       this.comboCounter.classList.add('visible');
     }
+    
+    // Trigger hit pause
+    const isHeavy = hitType === 'heavy' || hitType === 'special';
+    this.hitPauseDuration = isHeavy ? 0.15 : 0.08;
+    this.hitPauseTimer = this.hitPauseDuration;
   }
   
   updateHealthBars() {
@@ -192,6 +227,8 @@ export class Game {
     if (dots[playerDots[winIndex]]) {
       dots[playerDots[winIndex]].classList.add('won');
     }
+    if (this.p1ScoreEl) this.p1ScoreEl.textContent = this.roundWins[1];
+    if (this.p2ScoreEl) this.p2ScoreEl.textContent = this.roundWins[2];
   }
   
   startNextRound() {
@@ -221,8 +258,10 @@ export class Game {
     this.roundTimer = this.config.roundTime;
     this.matchOverEl.classList.remove('visible');
     
-    // Reset round dots
+    // Reset round dots and score labels
     this.roundCounter.querySelectorAll('.round-dot').forEach(dot => dot.classList.remove('won'));
+    if (this.p1ScoreEl) this.p1ScoreEl.textContent = '0';
+    if (this.p2ScoreEl) this.p2ScoreEl.textContent = '0';
     
     // Reset fighters
     this.fighter1.reset(200, this.config.groundY - this.config.fighterHeight, 1);

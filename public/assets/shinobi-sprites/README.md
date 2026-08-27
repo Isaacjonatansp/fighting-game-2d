@@ -1,0 +1,1 @@
+Shinobi sprites placeholder directory

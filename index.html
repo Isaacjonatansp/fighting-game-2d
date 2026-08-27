@@ -20,24 +20,25 @@
     canvas { display: block; width: 100%; height: 100%; }
     #ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
     .health-bar-container { 
-      position: absolute; top: 40px; height: 24px; 
+      position: absolute; top: clamp(20px, 3vh, 40px); height: clamp(16px, 2.5vh, 24px); 
       background: rgba(26, 3, 7, 0.8);
       border: 2px solid #D4AF37;
-      border-radius: 12px;
+      border-radius: clamp(8px, 1.5vh, 12px);
       overflow: hidden;
       box-shadow: 0 0 20px rgba(212, 175, 55, 0.3), inset 0 2px 10px rgba(0,0,0,0.5);
     }
     .health-bar-fill { 
       height: 100%; 
       background: linear-gradient(90deg, #E74C3C 0%, #E67E22 25%, #F1C40F 50%, #7CB342 75%, #2E7D32 100%);
-      border-radius: 10px;
+      border-radius: clamp(6px, 1vh, 10px);
       transition: width 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
       box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
     }
     .stamina-bar-container {
-      position: absolute; top: 68px; height: 8px;
+      position: absolute; top: clamp(44px, 6vh, 68px); height: clamp(5px, 1vh, 8px);
       background: rgba(26, 3, 7, 0.8);
       border: 1px solid rgba(212, 175, 55, 0.65);
+      border-radius: clamp(3px, 0.5vh, 4px);
       overflow: hidden;
     }
     .stamina-bar-fill {
@@ -46,31 +47,60 @@
       transition: width 120ms linear;
       box-shadow: 0 0 10px rgba(128, 222, 234, 0.8);
     }
-    #p1-stamina, #p1-health + .stamina-bar-container { left: 40px; width: 320px; }
-    #p2-stamina, #p2-health + .stamina-bar-container { right: 40px; width: 320px; }
+    #p1-health { left: clamp(16px, 3vw, 40px); width: clamp(180px, 35vw, 320px); max-width: 45vw; }
+    #p2-health { right: clamp(16px, 3vw, 40px); width: clamp(180px, 35vw, 320px); max-width: 45vw; text-align: right; }
+    #p1-stamina { left: clamp(16px, 3vw, 40px); width: clamp(180px, 35vw, 320px); max-width: 45vw; }
+    #p2-stamina { right: clamp(16px, 3vw, 40px); width: clamp(180px, 35vw, 320px); max-width: 45vw; }
     .health-bar-label {
-      position: absolute; top: -28px; left: 8px;
-      font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.15em;
-      color: #D4AF37; text-transform: uppercase;
+      position: absolute; top: clamp(-22px, -3vh, -28px); left: 8px;
+      font-family: 'Cinzel', serif; font-size: clamp(9px, 1.2vw, 11px); letter-spacing: 0.15em;
+      color: #D4AF37; text-transform: uppercase; white-space: nowrap;
     }
-    #p1-health { left: 40px; width: 320px; }
-    #p2-health { right: 40px; width: 320px; text-align: right; }
     #p2-health .health-bar-label { left: auto; right: 8px; }
+    .score-label {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      font-family: 'Cinzel', serif; font-size: clamp(8px, 1vw, 11px); letter-spacing: 0.1em;
+      color: #D4AF37; font-weight: 700;
+    }
+    #p1-score { left: 8px; right: auto; }
     #timer { 
-      position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
-      font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700;
+      position: absolute; top: clamp(20px, 3vh, 40px); left: 50%; transform: translateX(-50%);
+      font-family: 'Cinzel', serif; font-size: clamp(20px, 3.5vw, 28px); font-weight: 700;
       color: #EAE6DF; text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+      background: rgba(26, 3, 7, 0.7);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      padding: 4px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
     }
     .round-counter {
-      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      position: absolute; top: clamp(68px, 9vh, 80px); left: 50%; transform: translateX(-50%);
       display: flex; gap: 8px;
     }
     .round-dot {
-      width: 12px; height: 12px; border-radius: 50%;
-      background: #360A11; border: 2px solid #D4AF37;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #360A11; border: 1.5px solid #D4AF37;
       transition: all 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
     }
-    .round-dot.won { background: #D4AF37; box-shadow: 0 0 10px rgba(212, 175, 55, 0.8); }
+    .round-dot.won { 
+      background: linear-gradient(135deg, #D4AF37 0%, #C9A961 100%); 
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.9), 0 0 4px #D4AF37; 
+    }
+    #quick-restart-btn {
+      position: absolute; top: clamp(56px, 8vh, 72px); right: clamp(16px, 2.5vw, 32px);
+      font-family: 'Cinzel', serif; font-size: clamp(8px, 1vw, 10px); letter-spacing: 0.1em;
+      padding: 6px 14px; background: rgba(26, 3, 7, 0.7); border: 1px solid rgba(212, 175, 55, 0.5);
+      border-radius: 6px; color: #D4AF37; cursor: pointer; pointer-events: auto;
+      transition: all 200ms ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    #quick-restart-btn:hover {
+      background: rgba(54, 10, 17, 0.9);
+      border-color: #D4AF37;
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.5), 0 2px 8px rgba(0,0,0,0.4);
+    }
     #match-over {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       text-align: center; opacity: 0; pointer-events: none; display: none;
@@ -109,17 +139,42 @@
     }
     .combo-counter.visible { opacity: 1; }
     .controls-hint {
-      position: absolute; top: 108px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 32px; font-size: 12px; color: #A89F94;
+      position: absolute; top: clamp(84px, 12vh, 112px); left: 50%; transform: translateX(-50%);
+      display: flex; gap: 24px; font-size: 9px; color: #A89F94;
       font-family: 'Inter', sans-serif;
+      background: rgba(26, 3, 7, 0.75);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      padding: 6px 12px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      transition: all 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      z-index: 10;
     }
-    .control-group { display: flex; flex-direction: column; gap: 4px; align-items: center; }
-    .control-key {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 36px; height: 36px; padding: 0 8px;
+    .controls-hint.minimized {
+      padding: 4px 10px;
+      gap: 8px;
+    }
+    .controls-hint.minimized .control-group > *:not(:first-child) {
+      display: none;
+    }
+    .controls-toggle {
+      position: absolute; top: -24px; right: 8px;
+      width: 20px; height: 20px; border-radius: 50%;
       background: rgba(26, 3, 7, 0.8); border: 1px solid #D4AF37;
-      border-radius: 6px; font-family: 'Cinzel', serif; font-size: 11px;
-      color: #D4AF37;
+      color: #D4AF37; cursor: pointer; pointer-events: auto;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; line-height: 1;
+      transition: all 200ms ease;
+    }
+    .controls-toggle:hover {
+      background: #D4AF37; color: #1A0307;
+    }
+    .controls-hint.minimized .controls-toggle::before {
+      content: '+';
+    }
+    .controls-toggle::before {
+      content: '−';
     }
   </style>
 </head>
@@ -128,12 +183,14 @@
     <canvas id="game-canvas"></canvas>
     <div id="ui-overlay">
       <div id="p1-health" class="health-bar-container">
-        <span class="health-bar-label">Player 1</span>
+        <span class="health-bar-label">Player 1 &bull; Shinobi</span>
         <div class="health-bar-fill" id="p1-health-fill" style="width: 100%"></div>
+        <span class="score-label" id="p1-score">0</span>
       </div>
       <div id="p2-health" class="health-bar-container">
-        <span class="health-bar-label">Player 2</span>
+        <span class="health-bar-label">Player 2 &bull; Samurai</span>
         <div class="health-bar-fill" id="p2-health-fill" style="width: 100%"></div>
+        <span class="score-label" id="p2-score">0</span>
       </div>
       <div id="p1-stamina" class="stamina-bar-container">
         <div class="stamina-bar-fill" id="p1-stamina-fill" style="width: 100%"></div>
@@ -142,6 +199,7 @@
         <div class="stamina-bar-fill" id="p2-stamina-fill" style="width: 100%"></div>
       </div>
       <div id="timer">99</div>
+      <button id="quick-restart-btn">Restart</button>
       <div class="round-counter" id="round-counter">
         <div class="round-dot" data-player="1"></div>
         <div class="round-dot" data-player="1"></div>
@@ -154,28 +212,29 @@
         <button id="restart-btn">Rematch</button>
       </div>
       <div class="combo-counter" id="combo-counter">0 HIT COMBO</div>
-      <div class="controls-hint">
+      <div class="controls-hint" id="controls-hint">
+        <button class="controls-toggle" id="controls-toggle" aria-label="Toggle controls"></button>
         <div class="control-group">
-          <span>PLAYER 1 / CAPOEIRA</span>
-          <div style="display:flex;gap:4px;">
+          <span style="font-size: 9px; font-family: 'Cinzel', serif; letter-spacing: 0.1em; color: #00E5FF;">PLAYER 1 / SHINOBI</span>
+          <div style="display:flex;gap:3px;">
             <span class="control-key">W</span><span class="control-key">A</span><span class="control-key">S</span><span class="control-key">D</span>
           </div>
-          <div style="display:flex;gap:4px;">
+          <div style="display:flex;gap:3px;">
             <span class="control-key">J</span><span class="control-key">K</span><span class="control-key">L</span>
           </div>
-          <span style="font-size:10px;">Move / Light / Heavy / Special</span>
-          <span style="font-size:10px;">Space: Dash / Shift: Block</span>
+          <span style="font-size: 8px; color: #A89F94;">Move / Light / Heavy / Special</span>
+          <span style="font-size: 8px; color: #A89F94;">Space: Dash / Shift: Block</span>
         </div>
         <div class="control-group">
-          <span>PLAYER 2 / KYOKUSHIN</span>
-          <div style="display:flex;gap:4px;">
-            <span class="control-key">↑</span><span class="control-key">←</span><span class="control-key">↓</span><span class="control-key">→</span>
+          <span style="font-size: 9px; font-family: 'Cinzel', serif; letter-spacing: 0.1em; color: #FF3D00;">PLAYER 2 / SAMURAI</span>
+          <div style="display:flex;gap:3px;">
+            <span class="control-key">&uarr;</span><span class="control-key">&larr;</span><span class="control-key">&darr;</span><span class="control-key">&rarr;</span>
           </div>
-          <div style="display:flex;gap:4px;">
+          <div style="display:flex;gap:3px;">
             <span class="control-key">1</span><span class="control-key">2</span><span class="control-key">3</span>
           </div>
-          <span style="font-size:10px;">Move / Light / Heavy / Special</span>
-          <span style="font-size:10px;">Numpad 0: Dash / Right Shift: Block</span>
+          <span style="font-size: 8px; color: #A89F94;">Move / Light / Heavy / Special</span>
+          <span style="font-size: 8px; color: #A89F94;">Numpad 0: Dash / Right Shift: Block</span>
         </div>
       </div>
     </div>

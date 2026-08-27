@@ -1,4 +1,6 @@
 // 2D Pixel Art Renderer for Fighting Game
+import { ShinobiCharacterLoader } from './ShinobiCharacterLoader.js';
+
 export class TwoDRenderer {
   constructor(config) {
     this.config = config;
@@ -34,7 +36,11 @@ export class TwoDRenderer {
     this.fighterAnimationFrame = { 1: 0, 2: 0 };
     this.fighterAnimationTimer = { 1: 0, 2: 0 };
     
-    // Animation frame rates (frames per second)
+    // Shinobi character loader
+    this.shinobiLoader = new ShinobiCharacterLoader(this);
+    this.shinobiLoaded = { 1: false, 2: false };
+    
+    // Animation frame rates (frames per second) - adjusted for Shinobi sprites
     this.animationFPS = {
       idle: 6,
       walk: 10,
@@ -46,42 +52,52 @@ export class TwoDRenderer {
       special: 10,
       airAttack: 12,
       crouchAttack: 12,
-      block: 4,
-      hit: 8,
+      block: 8,
+      hit: 10,
       dash: 15,
       die: 4
     };
     
-    // Frame counts for each animation
+    // Frame counts for each animation (matching Shinobi sprites)
     this.animationFrameCounts = {
-      idle: 4,
-      walk: 6,
-      run: 6,
-      jump: 3,
-      fall: 2,
-      attack: 6,
-      heavyAttack: 7,
-      special: 8,
+      idle: 6,
+      walk: 8,
+      run: 8,
+      jump: 12,
+      fall: 12,
+      attack: 5,
+      heavyAttack: 3,
+      special: 4,
       airAttack: 5,
       crouchAttack: 5,
-      block: 3,
-      hit: 3,
-      dash: 5,
+      block: 4,
+      hit: 2,
+      dash: 8,
       die: 4
     };
     
-    // Particle system
+    // Particle and visual effects system
     this.particles = [];
+    this.afterimages = [];
+    this.afterimageTimer = { 1: 0, 2: 0 };
     this.screenFlash = { active: false, alpha: 0, color: '#ffffff', duration: 0, timer: 0 };
     this.screenShake = { intensity: 0, duration: 0, elapsed: 0, x: 0, y: 0 };
     
     // Initialize
     this.generateCharacterSprites();
-    this.loadKenneySprites();
+    this.loadShinobiSprites();
     this.setupCanvas();
     this.handleResize = this.handleResize.bind(this);
     window.addEventListener('resize', this.handleResize);
     this.resize(window.innerWidth, window.innerHeight);
+  }
+
+  // Load Shinobi sprites from CraftPix assets
+  async loadShinobiSprites() {
+    await this.shinobiLoader.loadAll();
+    this.shinobiLoaded[1] = this.shinobiLoader.isLoaded(1);
+    this.shinobiLoaded[2] = this.shinobiLoader.isLoaded(2);
+    console.log('Shinobi and Samurai sprites loaded:', this.shinobiLoaded);
   }
 
   // Load Kenney Platformer CC0 sprites as optional skin
@@ -109,10 +125,10 @@ export class TwoDRenderer {
       crouch: 'duck'
     };
 
-    // Load for both characters
+    // Load for both characters using dynamic character types
     await Promise.all([
-      this.loadKenneyCharacter(1, 'Adventurer'),
-      this.loadKenneyCharacter(2, 'Player')
+      this.loadKenneyCharacter(1, this.kenneyCharacterType[1]),
+      this.loadKenneyCharacter(2, this.kenneyCharacterType[2])
     ]);
   }
 
@@ -871,14 +887,16 @@ export class TwoDRenderer {
     }
     
     // For attack animations, use attackProgress directly for frame selection
+    const frameCount = this.shinobiLoaded[fighter.id]
+      ? this.shinobiLoader.getFrameCount(fighter.id, targetState)
+      : (this.animationFrameCounts[targetState] || 1);
+
     if (fighter.isAttacking && fighter.attackDuration > 0) {
-      const frameCount = this.animationFrameCounts[targetState] || 1;
       // Map attackProgress (0-1) to frame index
       this.fighterAnimationFrame[fighter.id] = Math.floor(fighter.attackProgress * frameCount) % frameCount;
     } else {
       // Advance animation frame normally for non-attack states
       const fps = this.animationFPS[targetState] || 6;
-      const frameCount = this.animationFrameCounts[targetState] || 1;
       this.fighterAnimationTimer[fighter.id] += dt;
       const frameTime = 1 / fps;
       
@@ -928,13 +946,94 @@ export class TwoDRenderer {
   }
   
   updateParticles(dt) {
+    // Update afterimages
+    this.afterimages = this.afterimages.filter(img => {
+      img.life -= dt;
+      if (img.life <= 0) return false;
+      img.alpha = Math.max(0, (img.life / img.maxLife) * (img.baseAlpha || 0.45));
+      return true;
+    });
+
+    // Update particles
     this.particles = this.particles.filter(p => {
       p.life -= dt;
       if (p.life <= 0) return false;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 500 * dt; // gravity
-      p.alpha = p.life / p.maxLife;
+      
+      p.alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+      
+      switch (p.type) {
+        case 'electric_spark':
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx += (Math.random() - 0.5) * 600 * dt;
+          p.vy += 120 * dt;
+          p.vx *= 0.94;
+          p.vy *= 0.94;
+          break;
+          
+        case 'ember':
+          p.seed = p.seed || Math.random() * 10;
+          p.x += p.vx * dt + Math.sin(p.life * 12 + p.seed) * 20 * dt;
+          p.y += p.vy * dt;
+          p.vy -= 25 * dt; // Rising embers
+          p.vx *= 0.95;
+          break;
+          
+        case 'hit_star':
+          p.rotation = (p.rotation || 0) + (p.rotSpeed || 10) * dt;
+          p.size = (p.baseSize || 20) * (p.life / p.maxLife);
+          break;
+          
+        case 'impact_ring':
+          p.radius = (p.radius || 10) + (p.expandSpeed || 140) * dt;
+          p.lineWidth = Math.max(0.5, (p.baseLineWidth || 3) * (p.life / p.maxLife));
+          break;
+          
+        case 'shadow_smoke':
+          p.x += (p.vx || 0) * dt;
+          p.y += (p.vy || -30) * dt;
+          p.radius = (p.radius || 8) + (p.expandSpeed || 25) * dt;
+          p.rotation = (p.rotation || 0) + (p.rotSpeed || 2) * dt;
+          break;
+          
+        case 'shuriken':
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.rotation = (p.rotation || 0) + (p.facing > 0 ? 30 : -30) * dt;
+          // Spawn subtle smoke trail
+          if (Math.random() < 0.4) {
+            this.addShadowSmoke(p.x, p.y, '#00E5FF', 0.2, 4);
+          }
+          break;
+          
+        case 'blade_wave':
+          p.x += p.vx * dt;
+          p.y += (p.vy || 0) * dt;
+          // Trailing particles
+          if (p.character === 'Shinobi') {
+            this.addElectricSpark(p.x - p.facing * 10, p.y + (Math.random() - 0.5) * 40, '#00F0FF', 0.25);
+          } else {
+            this.addEmber(p.x - p.facing * 10, p.y + (Math.random() - 0.5) * 40, '#FF6D00', 0.35);
+          }
+          break;
+          
+        case 'barrier':
+          p.radius = (p.baseRadius || 40) + Math.sin((1 - p.life / p.maxLife) * Math.PI) * 5;
+          break;
+          
+        case 'slash_cut':
+          // Static slash cut that fades
+          break;
+          
+        default:
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy += (p.gravity !== undefined ? p.gravity : 450) * dt;
+          p.vx *= (p.drag !== undefined ? p.drag : 0.98);
+          p.vy *= (p.drag !== undefined ? p.drag : 0.98);
+          break;
+      }
+      
       return true;
     });
   }
@@ -944,13 +1043,14 @@ export class TwoDRenderer {
       const angle = Math.random() * Math.PI * 2;
       const speed = 50 + Math.random() * 150;
       this.particles.push({
+        type: 'spark',
         x, y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed - 50,
-        life: 0.3 + Math.random() * 0.5,
-        maxLife: 0.8,
+        life: 0.3 + Math.random() * 0.4,
+        maxLife: 0.7,
         color,
-        size: 2 + Math.random() * 4,
+        size: 2 + Math.random() * 3,
         alpha: 1
       });
     }
@@ -958,6 +1058,7 @@ export class TwoDRenderer {
   
   addParticle(x, y, color, velocity, life, size = 3) {
     this.particles.push({
+      type: 'spark',
       x, y,
       vx: velocity.x,
       vy: velocity.y,
@@ -967,6 +1068,269 @@ export class TwoDRenderer {
       size,
       alpha: 1
     });
+  }
+
+  addElectricSpark(x, y, color = '#00F0FF', life = 0.3, size = 3) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 160;
+    this.particles.push({
+      type: 'electric_spark',
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 20,
+      life,
+      maxLife: life,
+      color,
+      size,
+      alpha: 1
+    });
+  }
+
+  addEmber(x, y, color = '#FF6D00', life = 0.6, size = 3) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.8;
+    const speed = 30 + Math.random() * 80;
+    this.particles.push({
+      type: 'ember',
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 30,
+      life,
+      maxLife: life,
+      color,
+      size: size + Math.random() * 2,
+      seed: Math.random() * 100,
+      alpha: 1
+    });
+  }
+
+  addShadowSmoke(x, y, color = '#00E5FF', life = 0.35, radius = 12) {
+    this.particles.push({
+      type: 'shadow_smoke',
+      x, y,
+      vx: (Math.random() - 0.5) * 30,
+      vy: -15 - Math.random() * 25,
+      radius,
+      expandSpeed: 20,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 4,
+      life,
+      maxLife: life,
+      color,
+      alpha: 0.6
+    });
+  }
+
+  spawnCharacterHitEffect(x, y, attackType, attackerColor, attackerVelocityX, attackerChar, facing = 1, attackKey = 'attack', comboStep = 1) {
+    const isHeavy = attackType === 'heavy' || attackType === 'special';
+    const isShinobi = attackerChar === 'Shinobi';
+    
+    if (isShinobi) {
+      // === SHINOBI HIT EFFECT: Electric / Lightning Star + Cyan Slice ===
+      // 1. Core Star Hitspark
+      this.particles.push({
+        type: 'hit_star',
+        x, y,
+        baseSize: isHeavy ? 36 : 24,
+        size: isHeavy ? 36 : 24,
+        rotation: Math.random() * Math.PI,
+        rotSpeed: 15 * (Math.random() > 0.5 ? 1 : -1),
+        points: 8,
+        innerColor: '#FFFFFF',
+        outerColor: '#00F0FF',
+        glowColor: '#0077FE',
+        life: isHeavy ? 0.22 : 0.16,
+        maxLife: isHeavy ? 0.22 : 0.16,
+        alpha: 1
+      });
+
+      // 2. Cyan Slash Cut Line across the hit point
+      const cutAngle = (facing > 0 ? -0.4 : 0.4) + (Math.random() - 0.5) * 0.3;
+      this.particles.push({
+        type: 'slash_cut',
+        x, y,
+        length: isHeavy ? 70 : 45,
+        angle: cutAngle,
+        width: isHeavy ? 5 : 3,
+        color: '#00F0FF',
+        coreColor: '#FFFFFF',
+        life: 0.18,
+        maxLife: 0.18,
+        alpha: 1
+      });
+
+      // 3. Electric / Lightning Sparks shooting in slice direction
+      const sparkCount = isHeavy ? 28 : 16;
+      for (let i = 0; i < sparkCount; i++) {
+        const baseAngle = facing > 0 ? (Math.PI * 0.1) : (Math.PI * 0.9);
+        const angle = baseAngle + (Math.random() - 0.5) * Math.PI * 0.7;
+        const speed = isHeavy ? (120 + Math.random() * 220) : (80 + Math.random() * 140);
+        this.particles.push({
+          type: 'electric_spark',
+          x, y,
+          vx: Math.cos(angle) * speed + attackerVelocityX * 0.3,
+          vy: Math.sin(angle) * speed - 30,
+          life: 0.25 + Math.random() * 0.3,
+          maxLife: 0.55,
+          color: i % 3 === 0 ? '#FFFFFF' : (i % 2 === 0 ? '#00F0FF' : '#0077FE'),
+          size: isHeavy ? (3 + Math.random() * 3) : (2 + Math.random() * 2),
+          alpha: 1
+        });
+      }
+
+      // 4. Expanding Cyan Impact Shockwave Ring
+      this.particles.push({
+        type: 'impact_ring',
+        x, y,
+        radius: 8,
+        expandSpeed: isHeavy ? 220 : 140,
+        baseLineWidth: isHeavy ? 4 : 2.5,
+        color: '#00F0FF',
+        life: isHeavy ? 0.28 : 0.18,
+        maxLife: isHeavy ? 0.28 : 0.18,
+        alpha: 1
+      });
+
+      // 5. Shadow smoke puff on heavy
+      if (isHeavy) {
+        this.addShadowSmoke(x, y, '#001133', 0.4, 18);
+        this.addShadowSmoke(x + facing * 15, y, '#00E5FF', 0.3, 14);
+      }
+
+    } else {
+      // === SAMURAI HIT EFFECT: Molten Flame Burst + Crimson Cut ===
+      // 1. Fiery Star Hitspark
+      this.particles.push({
+        type: 'hit_star',
+        x, y,
+        baseSize: isHeavy ? 40 : 26,
+        size: isHeavy ? 40 : 26,
+        rotation: Math.random() * Math.PI,
+        rotSpeed: 12 * (Math.random() > 0.5 ? 1 : -1),
+        points: 6,
+        innerColor: '#FFFFFF',
+        outerColor: '#FFD700',
+        glowColor: '#FF1744',
+        life: isHeavy ? 0.25 : 0.18,
+        maxLife: isHeavy ? 0.25 : 0.18,
+        alpha: 1
+      });
+
+      // 2. Fiery Crimson Slash Cut Line
+      const cutAngle = (facing > 0 ? 0.4 : -0.4) + (Math.random() - 0.5) * 0.3;
+      this.particles.push({
+        type: 'slash_cut',
+        x, y,
+        length: isHeavy ? 75 : 50,
+        angle: cutAngle,
+        width: isHeavy ? 6 : 3.5,
+        color: '#FF1744',
+        coreColor: '#FFF8E1',
+        life: 0.2,
+        maxLife: 0.2,
+        alpha: 1
+      });
+
+      // 3. Floating Burning Embers & Fire Sparks
+      const emberCount = isHeavy ? 30 : 18;
+      for (let i = 0; i < emberCount; i++) {
+        const baseAngle = facing > 0 ? (Math.PI * 0.15) : (Math.PI * 0.85);
+        const angle = baseAngle + (Math.random() - 0.5) * Math.PI * 0.85;
+        const speed = isHeavy ? (100 + Math.random() * 200) : (60 + Math.random() * 120);
+        this.particles.push({
+          type: 'ember',
+          x, y,
+          vx: Math.cos(angle) * speed + attackerVelocityX * 0.2,
+          vy: Math.sin(angle) * speed - 50,
+          life: 0.35 + Math.random() * 0.4,
+          maxLife: 0.75,
+          color: i % 4 === 0 ? '#FFFFFF' : (i % 3 === 0 ? '#FFD700' : (i % 2 === 0 ? '#FF6D00' : '#FF1744')),
+          size: isHeavy ? (3.5 + Math.random() * 3.5) : (2 + Math.random() * 2.5),
+          seed: Math.random() * 50,
+          alpha: 1
+        });
+      }
+
+      // 4. Expanding Fiery Gold Shockwave Ring
+      this.particles.push({
+        type: 'impact_ring',
+        x, y,
+        radius: 10,
+        expandSpeed: isHeavy ? 240 : 150,
+        baseLineWidth: isHeavy ? 4.5 : 3,
+        color: '#FF9100',
+        life: isHeavy ? 0.3 : 0.2,
+        maxLife: isHeavy ? 0.3 : 0.2,
+        alpha: 1
+      });
+    }
+  }
+
+  spawnCharacterBlockEffect(x, y, defenderColor, defenderChar, facing = 1) {
+    const isShinobi = defenderChar === 'Shinobi';
+    
+    if (isShinobi) {
+      // Shinobi: Hexagonal Ninjutsu barrier ward
+      this.particles.push({
+        type: 'barrier',
+        x: x + (facing > 0 ? 15 : -15),
+        y: y - 10,
+        baseRadius: 32,
+        radius: 32,
+        color: '#00F0FF',
+        life: 0.22,
+        maxLife: 0.22,
+        alpha: 0.85
+      });
+      
+      // Deflect sparks
+      for (let i = 0; i < 12; i++) {
+        const angle = (facing > 0 ? Math.PI : 0) + (Math.random() - 0.5) * Math.PI * 0.8;
+        const speed = 70 + Math.random() * 110;
+        this.addElectricSpark(x, y - 10, '#00F0FF', 0.25);
+      }
+    } else {
+      // Samurai: Heavy steel katana parry clash
+      this.particles.push({
+        type: 'hit_star',
+        x: x + (facing > 0 ? 12 : -12),
+        y: y - 10,
+        baseSize: 22,
+        size: 22,
+        rotation: 0,
+        rotSpeed: 20,
+        points: 4,
+        innerColor: '#FFFFFF',
+        outerColor: '#FFD700',
+        glowColor: '#FF9100',
+        life: 0.16,
+        maxLife: 0.16,
+        alpha: 1
+      });
+
+      this.particles.push({
+        type: 'impact_ring',
+        x: x + (facing > 0 ? 12 : -12),
+        y: y - 10,
+        radius: 6,
+        expandSpeed: 120,
+        baseLineWidth: 2.5,
+        color: '#FFD700',
+        life: 0.18,
+        maxLife: 0.18,
+        alpha: 1
+      });
+
+      for (let i = 0; i < 14; i++) {
+        const angle = (facing > 0 ? Math.PI : 0) + (Math.random() - 0.5) * Math.PI * 0.7;
+        const speed = 80 + Math.random() * 120;
+        this.addParticle(
+          x, y - 10, i % 2 === 0 ? '#FFFFFF' : '#FFD700',
+          { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed - 40 },
+          0.3 + Math.random() * 0.2,
+          2.5 + Math.random() * 2
+        );
+      }
+    }
   }
   
   triggerScreenFlash(color = '#ffffff', duration = 150) {
@@ -989,11 +1353,8 @@ export class TwoDRenderer {
     this.canvas.width = width;
     this.canvas.height = height;
     
-    // Calculate scale to fit reference resolution
     this.scaleX = width / this.referenceWidth;
     this.scaleY = height / this.referenceHeight;
-    const scale = Math.min(this.scaleX, this.scaleY);
-    
     this.viewportWidth = this.referenceWidth;
     this.viewportHeight = this.referenceHeight;
   }
@@ -1003,9 +1364,7 @@ export class TwoDRenderer {
   }
   
   clear() {
-    // Sky blue - Stage draws full background
-    this.ctx.fillStyle = '#87CEEB';
-    this.ctx.fillRect(0, 0, this.width, this.height);
+    this.ctx.clearRect(0, 0, this.width, this.height);
   }
   
   render() {
@@ -1016,133 +1375,109 @@ export class TwoDRenderer {
     this.ctx.translate(-this.cameraX + this.screenShake.x, -this.cameraY + this.screenShake.y);
     this.ctx.scale(this.scaleX, this.scaleY);
     
-    // Draw stage (Kenney-style arena with mountains, clouds, platforms, etc.)
+    // 1. Draw stage (rock arena, platforms, background)
     if (this.game?.stage) {
       this.game.stage.render(this.ctx, this);
     }
     
-    // Draw fighters
+    // 2. Draw afterimages behind characters
+    this.drawAfterimages();
+
+    // 3. Draw fighters and their active weapon slash arcs
     this.drawFighter(1);
     this.drawFighter(2);
     
-    // Draw particles
+    // 4. Draw traveling energy projectiles (blade waves, shurikens)
+    this.drawEnergyProjectiles();
+
+    // 5. Draw particles, hitsparks, and effects with additive glow
     this.drawParticles();
     
     this.ctx.restore();
     
-    // Draw screen flash (on top, not affected by camera)
+    // 6. Draw screen flash on top
     this.drawScreenFlash();
   }
-  
-  drawArena() {
-    const groundY = this.groundY;
-    const arenaWidth = this.arenaRight - this.arenaLeft;
-    
-    // Ground
-    const groundGradient = this.ctx.createLinearGradient(0, groundY, 0, this.referenceHeight);
-    groundGradient.addColorStop(0, '#2B050B');
-    groundGradient.addColorStop(0.5, '#360A11');
-    groundGradient.addColorStop(1, '#4A0E17');
-    this.ctx.fillStyle = groundGradient;
-    this.ctx.fillRect(this.arenaLeft, groundY, arenaWidth, this.referenceHeight - groundY);
-    
-    // Grid lines
-    this.ctx.strokeStyle = '#4A0E17';
-    this.ctx.lineWidth = 1;
-    const gridSize = 50;
-    for (let x = this.arenaLeft; x <= this.arenaRight; x += gridSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, groundY);
-      this.ctx.lineTo(x, this.referenceHeight);
-      this.ctx.stroke();
+
+  drawAfterimages() {
+    for (const img of this.afterimages) {
+      this.ctx.save();
+      this.ctx.globalAlpha = img.alpha;
+      this.ctx.translate(img.x, img.y);
+      if (img.facing < 0) {
+        this.ctx.scale(-1, 1);
+      }
+
+      // Draw tinted shadow/flame silhouette
+      this.ctx.drawImage(img.frame, -img.width / 2, -img.height);
+      
+      // Overlay color tint
+      this.ctx.globalCompositeOperation = 'source-atop';
+      this.ctx.fillStyle = img.color || '#00E5FF';
+      this.ctx.fillRect(-img.width / 2, -img.height, img.width, img.height);
+
+      this.ctx.restore();
     }
-    for (let y = groundY; y <= this.referenceHeight; y += gridSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(this.arenaLeft, y);
-      this.ctx.lineTo(this.arenaRight, y);
-      this.ctx.stroke();
-    }
-    
-    // Gold accent lines at edges
-    this.ctx.strokeStyle = '#D4AF37';
-    this.ctx.lineWidth = 3;
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.arenaLeft, groundY);
-    this.ctx.lineTo(this.arenaLeft, this.referenceHeight);
-    this.ctx.stroke();
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.arenaRight, groundY);
-    this.ctx.lineTo(this.arenaRight, this.referenceHeight);
-    this.ctx.stroke();
-    
-    // Center line
-    this.ctx.strokeStyle = '#D4AF37';
-    this.ctx.lineWidth = 2;
-    this.ctx.setLineDash([10, 10]);
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.referenceWidth / 2, groundY);
-    this.ctx.lineTo(this.referenceWidth / 2, this.referenceHeight);
-    this.ctx.stroke();
-    this.ctx.setLineDash([]);
   }
-  
+
   drawFighter(fighterId) {
     const fighter = this.game?.['fighter' + fighterId];
     if (!fighter) return;
 
-    // Try to use Kenney sprite if loaded
-    if (this.kenneyLoaded[fighterId] && this.kenneySprites[fighterId]) {
-      const charType = this.kenneyCharacterType[fighterId];
+    // Use Shinobi / Samurai sprite loader
+    if (this.shinobiLoaded[fighterId]) {
       const animState = this.fighterAnimationState[fighterId];
       const frameIndex = this.fighterAnimationFrame[fighterId];
-      const frames = this.kenneySprites[fighterId][animState];
-      if (frames && frames.length > 0) {
-        const frame = frames[frameIndex % frames.length];
+      const frame = this.shinobiLoader.getFrame(fighterId, animState, frameIndex);
+      
+      if (frame) {
         const x = fighter.x;
         const y = fighter.y;
         const facing = fighter.facing || 1;
-        const targetWidth = 64; // Match procedural sprite width
-        const targetHeight = 128; // Match procedural sprite height
-        // Kenney sprites have feet ~10px from bottom, adjust so feet touch ground
-        const footOffset = 10;
+        const targetWidth = 144;
+        const targetHeight = 144;
+        
+        const centerX = fighter.x + fighter.width / 2;
+        const bottomY = fighter.y + fighter.height;
+        const isShinobi = fighter.character === 'Shinobi' || fighterId === 1;
 
+        // Capture afterimages during dash, heavy attack, or special
+        if (fighter.state === 'dash' || fighter.state === 'heavyAttack' || fighter.state === 'heavyAttack2' || fighter.state === 'special') {
+          this.afterimageTimer[fighterId] = (this.afterimageTimer[fighterId] || 0) - (this.game?.deltaTime || 0.016);
+          if (this.afterimageTimer[fighterId] <= 0) {
+            this.afterimages.push({
+              frame,
+              x: centerX,
+              y: bottomY,
+              width: targetWidth,
+              height: targetHeight,
+              facing,
+              alpha: 0.45,
+              baseAlpha: 0.45,
+              life: 0.24,
+              maxLife: 0.24,
+              color: isShinobi ? '#00E5FF' : '#FF3D00'
+            });
+            this.afterimageTimer[fighterId] = 0.055;
+          }
+        }
+
+        // Draw character sprite
         this.ctx.save();
-        this.ctx.translate(x, y + fighter.height);
+        this.ctx.translate(centerX, bottomY);
         if (facing < 0) {
           this.ctx.scale(-1, 1);
         }
-        // Kenney sprites are 80x110, we need to center them at bottom
-        // Adjust so feet align with ground (similar to procedural)
-        this.ctx.drawImage(frame, -targetWidth / 2, -targetHeight + footOffset);
+        this.ctx.drawImage(frame, -targetWidth / 2, -targetHeight);
         this.ctx.restore();
 
-        // Attack-specific visual effects (same as procedural)
-        if (fighter.isAttacking && fighter.currentAttack) {
-          const attackType = fighter.currentAttack.type || fighter.currentAttack;
-          const progress = fighter.attackProgress || 0;
-          if ((attackType === 'attack' && progress > 0.4 && progress < 0.5) ||
-              (attackType === 'heavyAttack' && progress > 0.5 && progress < 0.6) ||
-              (attackType === 'special' && progress > 0.5 && progress < 0.6) ||
-              (attackType === 'airAttack' && progress > 0.3 && progress < 0.5) ||
-              (attackType === 'crouchAttack' && progress > 0.3 && progress < 0.5)) {
-            this.triggerScreenFlash('#ffd700', 80);
-            this.addHitParticles(x + (facing * 20), y - 10, '#ffd700', 8);
-          }
-          if ((attackType === 'heavyAttack' && progress > 0.4 && progress < 0.7) ||
-              (attackType === 'special' && progress > 0.4 && progress < 0.7)) {
-            this.ctx.save();
-            this.ctx.globalAlpha = 0.3;
-            this.ctx.fillStyle = '#8B0000';
-            this.ctx.translate(-facing * 8, 0);
-            this.ctx.drawImage(frame, -targetWidth / 2, -targetHeight);
-            this.ctx.restore();
-          }
-        }
-        return; // Skip procedural drawing
+        // Draw character-themed active attack effects (weapon slash trails, glows, etc.)
+        this.drawCharacterAttackFX(fighter, fighterId, centerX, bottomY, facing, targetWidth, targetHeight);
+        return;
       }
     }
 
-    // Fallback to procedural sprite (original code)
+    // Fallback procedural sprite
     const charName = this.fighterSprites[fighterId];
     if (!charName || !this.characterSprites[charName]) return;
     const animState = this.fighterAnimationState[fighterId];
@@ -1150,55 +1485,509 @@ export class TwoDRenderer {
     const frames = this.characterSprites[charName][animState];
     if (!frames || frames.length === 0) return;
     const frame = frames[frameIndex % frames.length];
-    const x = fighter.x;
-    const y = fighter.y;
     const facing = fighter.facing || 1;
     this.ctx.save();
-    this.ctx.translate(x, y + fighter.height);
+    this.ctx.translate(fighter.x, fighter.y + fighter.height);
     if (facing < 0) {
       this.ctx.scale(-1, 1);
     }
-    // Procedural sprites are 64x128, feet at bottom
     this.ctx.drawImage(frame, -frame.width / 2, -frame.height);
-    if (fighter.isAttacking && fighter.currentAttack) {
-      const attackType = fighter.currentAttack.type || fighter.currentAttack;
-      const progress = fighter.attackProgress || 0;
-      if ((attackType === 'attack' && progress > 0.4 && progress < 0.5) ||
-          (attackType === 'heavyAttack' && progress > 0.5 && progress < 0.6) ||
-          (attackType === 'special' && progress > 0.5 && progress < 0.6) ||
-          (attackType === 'airAttack' && progress > 0.3 && progress < 0.5) ||
-          (attackType === 'crouchAttack' && progress > 0.3 && progress < 0.5)) {
-        this.triggerScreenFlash('#ffd700', 80);
-        this.addHitParticles(x + (facing * 20), y - 10, '#ffd700', 8);
-      }
-      if ((attackType === 'heavyAttack' && progress > 0.4 && progress < 0.7) ||
-          (attackType === 'special' && progress > 0.4 && progress < 0.7)) {
-        this.ctx.save();
-        this.ctx.globalAlpha = 0.3;
-        this.ctx.fillStyle = '#8B0000';
-        this.ctx.translate(-facing * 8, 0);
-        this.ctx.drawImage(frame, -frame.width / 2, -frame.height);
-        this.ctx.restore();
-      }
-    }
     this.ctx.restore();
   }
-  
-  drawParticles() {
+
+  drawCharacterAttackFX(fighter, fighterId, centerX, bottomY, facing, targetWidth, targetHeight) {
+    if (!fighter.isAttacking && fighter.state !== 'dash') return;
+
+    const isShinobi = fighter.character === 'Shinobi' || fighterId === 1;
+    const progress = fighter.attackProgress || 0;
+    const state = fighter.state;
+    const ctx = this.ctx;
+
+    // Hand/Katana origin point
+    const weaponOriginX = centerX + facing * 20;
+    const weaponOriginY = bottomY - 60;
+
+    ctx.save();
+
+    if (isShinobi) {
+      // ==========================================
+      // === SHINOBI ATTACK VISUAL EFFECTS ========
+      // ==========================================
+      if (state === 'attack') {
+        // Light 1: Swift horizontal neon-cyan slash arc
+        if (progress >= 0.15 && progress <= 0.65) {
+          const arcProgress = (progress - 0.15) / 0.5;
+          const arcRadius = 55;
+          const startAngle = (facing > 0 ? -Math.PI * 0.35 : Math.PI * 0.65) + arcProgress * (facing > 0 ? 0.7 : -0.7);
+          const endAngle = startAngle + (facing > 0 ? 1.2 : -1.2);
+          
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY, arcRadius, startAngle, endAngle, '#FFFFFF', '#00F0FF', '#0077FE', 14, facing);
+          
+          // Trailing electric sparks
+          if (Math.random() < 0.6) {
+            this.addElectricSpark(weaponOriginX + facing * Math.cos(endAngle) * arcRadius, weaponOriginY + Math.sin(endAngle) * arcRadius, '#00F0FF', 0.2);
+          }
+        }
+      } else if (state === 'attack2') {
+        // Light 2: Upward rising diagonal azure crescent slash
+        if (progress >= 0.15 && progress <= 0.65) {
+          const arcProgress = (progress - 0.15) / 0.5;
+          const arcRadius = 60;
+          const startAngle = (facing > 0 ? Math.PI * 0.3 : Math.PI * 0.7) - arcProgress * (facing > 0 ? 1.0 : -1.0);
+          const endAngle = startAngle - (facing > 0 ? 1.1 : -1.1);
+          
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY + 10, arcRadius, startAngle, endAngle, '#FFFFFF', '#00E5FF', '#0077FE', 16, facing);
+        }
+      } else if (state === 'attack3') {
+        // Light 3: Dual lightning thrust & shadow shurikens
+        if (progress >= 0.15 && progress <= 0.7) {
+          const arcProgress = (progress - 0.15) / 0.55;
+          const arcRadius = 68;
+          const startAngle = (facing > 0 ? -Math.PI * 0.4 : Math.PI * 0.6) + arcProgress * (facing > 0 ? 1.1 : -1.1);
+          const endAngle = startAngle + (facing > 0 ? 1.3 : -1.3);
+          
+          this.drawSlashArc(ctx, weaponOriginX + facing * 15, weaponOriginY, arcRadius, startAngle, endAngle, '#FFFFFF', '#00F0FF', '#18FFFF', 18, facing);
+          
+          // Spawn 3 spinning shadow shurikens at peak swing
+          if (progress >= 0.35 && progress <= 0.42 && !fighter._shurikenSpawned) {
+            fighter._shurikenSpawned = true;
+            for (let s = -1; s <= 1; s++) {
+              this.particles.push({
+                type: 'shuriken',
+                character: 'Shinobi',
+                x: weaponOriginX + facing * 35,
+                y: weaponOriginY + s * 14,
+                vx: facing * (340 + Math.abs(s) * 20),
+                vy: s * 30,
+                facing,
+                life: 0.38,
+                maxLife: 0.38,
+                alpha: 1
+              });
+            }
+          }
+        } else {
+          fighter._shurikenSpawned = false;
+        }
+      } else if (state === 'heavyAttack' || state === 'heavyAttack2') {
+        // Heavy: Twin Shadow Cross (X-slash) + air distortion
+        if (progress >= 0.2 && progress <= 0.75) {
+          const arcProgress = (progress - 0.2) / 0.55;
+          const radius = 72;
+          
+          // Slash 1 (down-right)
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY, radius, -Math.PI * 0.4, Math.PI * 0.4, '#FFFFFF', '#00F0FF', '#0077FE', 20, facing);
+          // Slash 2 (up-right cross)
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY, radius, Math.PI * 0.4, -Math.PI * 0.3, '#FFFFFF', '#18FFFF', '#0077FE', 16, facing);
+          
+          if (Math.random() < 0.5) {
+            this.addElectricSpark(weaponOriginX + facing * 40, weaponOriginY + (Math.random() - 0.5) * 40, '#00F0FF', 0.25);
+          }
+        }
+      } else if (state === 'special') {
+        // Special: "Raijin Shadow Gale" — giant electric crescent wave
+        if (progress >= 0.2 && progress <= 0.8) {
+          const radius = 80;
+          this.drawSlashArc(ctx, weaponOriginX + facing * 10, weaponOriginY - 5, radius, -Math.PI * 0.5, Math.PI * 0.5, '#FFFFFF', '#00FFFF', '#0077FE', 24, facing);
+          
+          // Spawn traveling electric crescent blade wave
+          if (progress >= 0.32 && progress <= 0.4 && !fighter._bladeWaveSpawned) {
+            fighter._bladeWaveSpawned = true;
+            this.particles.push({
+              type: 'blade_wave',
+              character: 'Shinobi',
+              x: weaponOriginX + facing * 30,
+              y: weaponOriginY - 5,
+              vx: facing * 450,
+              vy: 0,
+              facing,
+              width: 24,
+              height: 90,
+              color: '#00F0FF',
+              coreColor: '#FFFFFF',
+              life: 0.45,
+              maxLife: 0.45,
+              alpha: 1
+            });
+            this.triggerScreenFlash('#00E5FF', 90);
+          }
+        } else {
+          fighter._bladeWaveSpawned = false;
+        }
+      } else if (state === 'airAttack') {
+        // Air: Downward diving 45-degree cyan slash
+        if (progress >= 0.15 && progress <= 0.65) {
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY + 15, 60, -Math.PI * 0.2, Math.PI * 0.6, '#FFFFFF', '#00F0FF', '#0077FE', 18, facing);
+        }
+      } else if (state === 'crouchAttack') {
+        // Crouch: Low sweeping ground-level cyan blade
+        if (progress >= 0.15 && progress <= 0.65) {
+          this.drawSlashArc(ctx, weaponOriginX + facing * 10, bottomY - 20, 55, Math.PI * 0.1, Math.PI * 0.8, '#FFFFFF', '#00F0FF', '#0077FE', 14, facing);
+          this.addElectricSpark(weaponOriginX + facing * 45, bottomY - 10, '#00F0FF', 0.2);
+        }
+      }
+
+    } else {
+      // ==========================================
+      // === SAMURAI ATTACK VISUAL EFFECTS ========
+      // ==========================================
+      if (state === 'attack') {
+        // Light 1: Fiery crimson & gold katana slash arc
+        if (progress >= 0.15 && progress <= 0.65) {
+          const arcProgress = (progress - 0.15) / 0.5;
+          const arcRadius = 58;
+          const startAngle = (facing > 0 ? -Math.PI * 0.35 : Math.PI * 0.65) + arcProgress * (facing > 0 ? 0.7 : -0.7);
+          const endAngle = startAngle + (facing > 0 ? 1.2 : -1.2);
+          
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY, arcRadius, startAngle, endAngle, '#FFFFFF', '#FFD700', '#FF1744', 16, facing);
+          
+          if (Math.random() < 0.6) {
+            this.addEmber(weaponOriginX + facing * Math.cos(endAngle) * arcRadius, weaponOriginY + Math.sin(endAngle) * arcRadius, '#FF6D00', 0.3);
+          }
+        }
+      } else if (state === 'attack2') {
+        // Light 2: Heavy downward cleave with molten heat trail
+        if (progress >= 0.15 && progress <= 0.65) {
+          const arcProgress = (progress - 0.15) / 0.5;
+          const arcRadius = 64;
+          const startAngle = (facing > 0 ? -Math.PI * 0.6 : Math.PI * 0.4) + arcProgress * (facing > 0 ? 0.9 : -0.9);
+          const endAngle = startAngle + (facing > 0 ? 1.3 : -1.3);
+          
+          this.drawSlashArc(ctx, weaponOriginX, weaponOriginY, arcRadius, startAngle, endAngle, '#FFF8E1', '#FF9100', '#D50000', 18, facing);
+        }
+      } else if (state === 'attack3') {
+        // Light 3: Wide horizontal flame cleave and ember burst
+        if (progress >= 0.15 && progress <= 0.7) {
+          const arcRadius = 72;
+          this.drawSlashArc(ctx, weaponOriginX + facing * 10, weaponOriginY, arcRadius, -Math.PI * 0.3, Math.PI * 0.4, '#FFFFFF', '#FFD700', '#FF1744', 22, facing);
+          
+          if (progress >= 0.35 && progress <= 0.42 && !fighter._emberBurstSpawned) {
+            fighter._emberBurstSpawned = true;
+            for (let i = 0; i < 8; i++) {
+              this.addEmber(weaponOriginX + facing * 45, weaponOriginY + (Math.random() - 0.5) * 30, '#FF3D00', 0.45);
+            }
+          }
+        } else {
+          fighter._emberBurstSpawned = false;
+        }
+      } else if (state === 'heavyAttack' || state === 'heavyAttack2') {
+        // Heavy: "Oni Cleave" — massive vertical power slash with ground eruption
+        if (progress >= 0.2 && progress <= 0.75) {
+          const radius = 78;
+          this.drawSlashArc(ctx, weaponOriginX + facing * 12, weaponOriginY - 10, radius, -Math.PI * 0.7, Math.PI * 0.3, '#FFFFFF', '#FFD700', '#FF1744', 24, facing);
+          
+          if (progress > 0.45 && progress < 0.6) {
+            // Ground spark blast
+            this.addHitParticles(weaponOriginX + facing * 50, bottomY - 10, '#FFD700', 4);
+          }
+        }
+      } else if (state === 'special') {
+        // Special: "Dragon Flame Wave" — surging fire crescent traveling along ground
+        if (progress >= 0.2 && progress <= 0.8) {
+          const radius = 85;
+          this.drawSlashArc(ctx, weaponOriginX + facing * 15, weaponOriginY, radius, -Math.PI * 0.6, Math.PI * 0.4, '#FFF8E1', '#FF9100', '#FF1744', 26, facing);
+          
+          // Spawn traveling fire crescent blade wave
+          if (progress >= 0.32 && progress <= 0.4 && !fighter._bladeWaveSpawned) {
+            fighter._bladeWaveSpawned = true;
+            this.particles.push({
+              type: 'blade_wave',
+              character: 'Samurai',
+              x: weaponOriginX + facing * 35,
+              y: weaponOriginY + 10,
+              vx: facing * 420,
+              vy: 0,
+              facing,
+              width: 28,
+              height: 95,
+              color: '#FF3D00',
+              coreColor: '#FFD700',
+              life: 0.48,
+              maxLife: 0.48,
+              alpha: 1
+            });
+            this.triggerScreenFlash('#FF3D00', 90);
+          }
+        } else {
+          fighter._bladeWaveSpawned = false;
+        }
+      } else if (state === 'airAttack') {
+        // Air: 360-degree flaming katana wheel
+        if (progress >= 0.15 && progress <= 0.7) {
+          const wheelProgress = (progress - 0.15) / 0.55;
+          const startA = wheelProgress * Math.PI * 2 * facing;
+          this.drawSlashArc(ctx, centerX, bottomY - 70, 65, startA, startA + Math.PI * 1.4 * facing, '#FFF8E1', '#FFD700', '#FF1744', 18, facing);
+        }
+      } else if (state === 'crouchAttack') {
+        // Crouch: Low drawing katana sweep with molten sparks
+        if (progress >= 0.15 && progress <= 0.65) {
+          this.drawSlashArc(ctx, weaponOriginX + facing * 10, bottomY - 18, 60, Math.PI * 0.1, Math.PI * 0.75, '#FFF8E1', '#FF9100', '#FF1744', 16, facing);
+          this.addEmber(weaponOriginX + facing * 50, bottomY - 8, '#FFD700', 0.25);
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // Draw smooth, glowing katana slash arc with core and gradient glow
+  drawSlashArc(ctx, cx, cy, radius, startAngle, endAngle, coreColor, midColor, outerColor, width, facing) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    
+    // Outer glow
+    ctx.strokeStyle = outerColor;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle, facing < 0);
+    ctx.stroke();
+    
+    // Mid intense color
+    ctx.strokeStyle = midColor;
+    ctx.lineWidth = width * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle, facing < 0);
+    ctx.stroke();
+    
+    // Inner white core
+    ctx.strokeStyle = coreColor;
+    ctx.lineWidth = width * 0.25;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle, facing < 0);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+
+  drawEnergyProjectiles() {
     for (const p of this.particles) {
-      this.ctx.save();
-      this.ctx.globalAlpha = p.alpha;
-      this.ctx.fillStyle = p.color;
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.restore();
+      if (p.type === 'blade_wave') {
+        this.drawBladeWave(p);
+      } else if (p.type === 'shuriken') {
+        this.drawShuriken(p);
+      }
+    }
+  }
+
+  drawBladeWave(p) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = p.alpha;
+    ctx.translate(p.x, p.y);
+    if (p.facing < 0) {
+      ctx.scale(-1, 1);
+    }
+
+    const isShinobi = p.character === 'Shinobi';
+    const h = p.height || 90;
+    const w = p.width || 25;
+
+    // Glowing crescent path
+    ctx.beginPath();
+    ctx.moveTo(w, 0);
+    ctx.quadraticCurveTo(-w * 0.5, -h * 0.5, -w, -h * 0.5);
+    ctx.quadraticCurveTo(0, 0, -w, h * 0.5);
+    ctx.quadraticCurveTo(-w * 0.5, h * 0.5, w, 0);
+    ctx.closePath();
+
+    // Fill with gradient
+    const grad = ctx.createLinearGradient(-w, 0, w, 0);
+    if (isShinobi) {
+      grad.addColorStop(0, 'rgba(0, 119, 254, 0)');
+      grad.addColorStop(0.5, '#00F0FF');
+      grad.addColorStop(1, '#FFFFFF');
+    } else {
+      grad.addColorStop(0, 'rgba(213, 0, 0, 0)');
+      grad.addColorStop(0.5, '#FF6D00');
+      grad.addColorStop(1, '#FFF8E1');
+    }
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Outer glow stroke
+    ctx.strokeStyle = isShinobi ? '#00FFFF' : '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  drawShuriken(p) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = p.alpha;
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rotation || 0);
+
+    const size = 12;
+    // 4-point ninja star
+    ctx.fillStyle = '#00F0FF';
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const angle = (i * Math.PI) / 2;
+      const xTip = Math.cos(angle) * size;
+      const yTip = Math.sin(angle) * size;
+      const xInner = Math.cos(angle + Math.PI / 4) * (size * 0.35);
+      const yInner = Math.sin(angle + Math.PI / 4) * (size * 0.35);
+      if (i === 0) ctx.moveTo(xTip, yTip);
+      else ctx.lineTo(xTip, yTip);
+      ctx.lineTo(xInner, yInner);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Center core
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  drawParticles() {
+    const ctx = this.ctx;
+    
+    for (const p of this.particles) {
+      // Blade waves and shurikens are rendered in drawEnergyProjectiles
+      if (p.type === 'blade_wave' || p.type === 'shuriken') continue;
+
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+
+      if (p.type === 'hit_star') {
+        // Multi-point hitspark star
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation || 0);
+        
+        const pts = p.points || 6;
+        const outerR = p.size || 20;
+        const innerR = outerR * 0.25;
+        
+        ctx.beginPath();
+        for (let i = 0; i < pts * 2; i++) {
+          const r = i % 2 === 0 ? outerR : innerR;
+          const a = (i * Math.PI) / pts;
+          const px = Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        
+        ctx.fillStyle = p.outerColor || '#FFD700';
+        ctx.shadowColor = p.glowColor || '#FF1744';
+        ctx.shadowBlur = 12;
+        ctx.fill();
+        
+        // Inner core
+        ctx.fillStyle = p.innerColor || '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(0, 0, innerR, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (p.type === 'slash_cut') {
+        // Slash cut mark
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle || 0);
+        
+        const halfLen = (p.length || 50) / 2;
+        ctx.strokeStyle = p.color || '#00F0FF';
+        ctx.lineWidth = p.width || 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-halfLen, 0);
+        ctx.lineTo(halfLen, 0);
+        ctx.stroke();
+
+        ctx.strokeStyle = p.coreColor || '#FFFFFF';
+        ctx.lineWidth = Math.max(1, (p.width || 4) * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(-halfLen * 0.8, 0);
+        ctx.lineTo(halfLen * 0.8, 0);
+        ctx.stroke();
+
+      } else if (p.type === 'impact_ring') {
+        // Expanding shockwave ring
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = p.color || '#FFFFFF';
+        ctx.lineWidth = p.lineWidth || 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius || 10, 0, Math.PI * 2);
+        ctx.stroke();
+
+      } else if (p.type === 'shadow_smoke') {
+        // Soft dark smoke cloud
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation || 0);
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, p.radius || 12);
+        grad.addColorStop(0, p.color || 'rgba(0, 229, 255, 0.4)');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, p.radius || 12, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (p.type === 'barrier') {
+        // Hexagonal energy shield
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.translate(p.x, p.y);
+        const r = p.radius || 30;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i * Math.PI) / 3;
+          const hx = Math.cos(a) * r;
+          const hy = Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+        ctx.fill();
+        ctx.strokeStyle = p.color || '#00F0FF';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+      } else if (p.type === 'electric_spark') {
+        // Bright electric spark
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = p.color || '#00F0FF';
+        ctx.shadowColor = p.color || '#00F0FF';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size || 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (p.type === 'ember') {
+        // Fiery glowing ember
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = p.color || '#FF6D00';
+        ctx.shadowColor = '#FF1744';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else {
+        // Standard particle
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
     }
   }
   
   drawScreenFlash() {
     if (this.screenFlash.active) {
-      const dt = 1/60; // approximate
+      const dt = 1/60;
       this.screenFlash.timer -= dt * 1000;
       this.screenFlash.alpha = 0.6 * Math.max(0, this.screenFlash.timer / this.screenFlash.duration);
       
