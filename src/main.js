@@ -19,8 +19,8 @@ const CONFIG = {
   groundY: 580,
   roundTime: 99,
   maxRounds: 3,
-  fighterWidth: 72,
-  fighterHeight: 144
+  fighterWidth: 56,
+  fighterHeight: 112
 };
 
 // Initialize systems
@@ -63,8 +63,9 @@ const fighter2 = new Fighter({
 // Create stage
 const stage = new Stage(CONFIG);
 
-// Load CraftPix rock sprites
-await stage.loadRocks();
+// Load character sprites
+await renderer.loadShinobiSprites();
+// No explosion loader needed
 
 // Initialize game
 const game = new Game({

@@ -40,27 +40,11 @@ export class Fighter {
     this.comboType = null;
     this.lastAttackTime = 0;
     this.damageMultiplier = 1;
-    this.attackProgress = 0; // Track attack animation progress (0-1)
-    this.attackDuration = 0; // Total duration of current attack
-    this.attackElapsed = 0; // Time elapsed in current attack
+    this.attackProgress = 0;
+    this.attackDuration = 0;
+    this.attackElapsed = 0;
     
     this.hurtbox = { x: this.x, y: this.y, width: this.width, height: this.height };
-    
-    // 3D animation state flags
-    this.isAttacking = false;
-    this.isBlocking = false;
-    this.isDashing = false;
-    this.isHit = false;
-    
-    // Velocity aliases for 3D renderer
-    Object.defineProperty(this, 'velX', {
-      get: () => this.velocityX,
-      set: (v) => { this.velocityX = v; }
-    });
-    Object.defineProperty(this, 'velY', {
-      get: () => this.velocityY,
-      set: (v) => { this.velocityY = v; }
-    });
   }
   
   reset(x, y, facing) {
@@ -95,7 +79,6 @@ export class Fighter {
       this.stamina = Math.min(this.maxStamina, this.stamina + 24 * dt);
     }
 
-    // Handle hitstun
     if (this.hitStun > 0) {
       this.hitStun -= dt;
       if (this.hitStun <= 0) {
@@ -105,7 +88,6 @@ export class Fighter {
       return;
     }
     
-    // Handle state-based logic
     if (this.state === 'dash') {
       this.updateDash(dt);
     } else if (this.state === 'attack' || this.state === 'attack2' || this.state === 'attack3' || 
@@ -116,11 +98,9 @@ export class Fighter {
       this.handleMovement(input);
       this.handleAttacks(input);
       
-      // Update animation frame for non-attack states
       this.animFrame += dt;
     }
     
-    // Update hurtbox
     this.updateHurtbox();
   }
   
@@ -132,10 +112,8 @@ export class Fighter {
     if (this.state === 'block') {
       if (!actions.block) {
         this.setState('idle');
-        this.isBlocking = false;
       } else {
         this.velocityX = 0;
-        this.isBlocking = true;
         return;
       }
     }
@@ -149,34 +127,31 @@ export class Fighter {
       this.velocityX = 0;
       this.invincible = false;
       this.setState('block');
-      this.isBlocking = true;
       return;
     }
     
-    // Horizontal movement
+    // Horizontal movement (pixel per second based on PhysicsEngine moveSpeed)
     if (dir.x !== 0) {
-      const movementSpeed = this.character === 'crimson' ? 6.5 : 5.4;
-      this.velocityX = dir.x * movementSpeed;
+      const speed = this.character === 'crimson' ? 360 : 300;
+      this.velocityX = dir.x * speed;
       this.facing = dir.x;
       if (this.onGround && this.state !== 'walk') this.setState('walk');
     } else {
       if (this.onGround && this.state === 'walk') this.setState('idle');
     }
     
-    // Jump
+    // Jump (pixels per second upward)
     if (jumpPressed && this.onGround) {
-      this.velocityY = -15;
+      this.velocityY = -650;
       this.onGround = false;
       this.canDoubleJump = true;
       this.setState('jump');
     } else if (jumpPressed && !this.onGround && this.canDoubleJump) {
-      // Double jump
-      this.velocityY = -13;
+      this.velocityY = -550;
       this.canDoubleJump = false;
       this.setState('doubleJump');
     }
     
-    // Crouch
     if (dir.y > 0 && this.onGround) {
       this.setState('crouch');
     } else if (this.state === 'crouch' && dir.y <= 0) {
@@ -187,20 +162,16 @@ export class Fighter {
   handleAttacks(input) {
     const actions = input.getActionState(this.controls);
     
-    // Only allow new attacks if not already attacking or in hitstun
     if (this.state !== 'attack' && this.state !== 'attack2' && this.state !== 'attack3' && 
         this.state !== 'heavyAttack' && this.state !== 'heavyAttack2' && this.state !== 'special' &&
         this.state !== 'airAttack' && this.state !== 'crouchAttack' && this.state !== 'block' && this.state !== 'dash' &&
         this.hitStun <= 0) {
       if (actions.light) {
         if (!this.onGround) {
-          // Air light attack
           this.startAttack(CombatSystem.ATTACKS.airLight, 'airAttack');
         } else if (this.state === 'crouch') {
-          // Crouch light attack
           this.startAttack(CombatSystem.ATTACKS.crouchLight, 'crouchAttack');
         } else {
-          // Standing light combo
           this.startComboAttack('light');
         }
       } else if (actions.heavy) {
@@ -222,8 +193,6 @@ export class Fighter {
     const timeSinceLastAttack = now - this.lastAttackTime;
     const canContinueCombo = timeSinceLastAttack <= 800 && this.comboStep > 0 && this.comboType === type;
     
-    // Light attacks have exactly three steps. A late input or a different
-    // attack type always starts a fresh sequence.
     if (canContinueCombo && type === 'light' && this.comboStep < 3) {
       this.comboStep++;
     } else if (canContinueCombo && type !== 'light') {
@@ -235,7 +204,6 @@ export class Fighter {
     this.comboType = type;
     this.lastAttackTime = now;
     
-    // Select attack based on combo step and type
     let attack, stateName;
     
     if (type === 'light') {
@@ -278,8 +246,7 @@ export class Fighter {
     this.setState(stateName);
     this.animFrame = 0;
     this.hitLanded = false;
-    this.velocityX = 0; // Stop movement during attack
-    this.isAttacking = true;
+    this.velocityX = 0;
     this.attackProgress = 0;
     this.attackElapsed = 0;
     this.attackDuration = attack.startup + attack.active + attack.recovery;
@@ -295,25 +262,147 @@ export class Fighter {
 
   startDash(direction) {
     this.facing = direction === 0 ? this.facing : Math.sign(direction);
-    // Longer dash with more distance
-    this.velocityX = this.facing * (this.character === 'crimson' ? 22 : 20);
+    // Increased dash distance for more impactful movement
+    this.velocityX = this.facing * (this.character === 'crimson' ? 1300 : 1200);
     this.velocityY = 0;
-    this.dashTimer = 0.25;
-    this.dashCooldown = 0.5;
+    this.dashTimer = 0.32;
+    this.dashCooldown = 0.45;
     this.invincible = true;
     this.setState('dash');
-    this.isDashing = true;
+
+    // === DASH VISUAL EFFECTS ===
+    this.dashTrail = []; // reset trail
+    this.dashAfterimageTimer = 0;
+
+    // Spawn initial burst of dash particles
+    this.spawnDashStartEffect();
   }
 
   updateDash(dt) {
     this.dashTimer -= dt;
     this.animFrame += dt;
+
+    // Continuously spawn trail particles while dashing
+    this.spawnDashTrailEffect(dt);
+
     if (this.dashTimer <= 0) {
       this.velocityX = 0;
       this.invincible = false;
       this.setState('idle');
-      this.isDashing = false;
+      // Final burst when dash ends
+      this.spawnDashEndEffect();
     }
+  }
+
+  // === DASH EFFECT SPAWNERS ===
+  spawnDashStartEffect() {
+    if (!window.game || !window.game.renderer) return;
+    const renderer = window.game.renderer;
+
+    // Burst of sparks at feet (behind fighter)
+    const fx = this.x + this.width / 2;
+    const fy = this.y + this.height - 10;
+    const burstDir = -this.facing;
+
+    // Ground impact burst (8 particles flying back)
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * i) / 4 + Math.PI / 2; // backward semicircle
+      const speed = 180 + Math.random() * 140;
+      renderer.addParticle(
+        fx, fy,
+        i % 3 === 0 ? '#FFFFFF' : (i % 2 === 0 ? this.color : '#FFD700'),
+        { x: Math.cos(angle) * speed * burstDir, y: -Math.abs(Math.sin(angle)) * speed * 0.6 },
+        0.3 + Math.random() * 0.15,
+        2 + Math.random() * 2,
+        'spark',
+        { gravity: 400 }
+      );
+    }
+
+    // Quick shockwave ring
+    renderer.particles.push({
+      type: 'shockwave',
+      x: fx, y: fy,
+      color: this.color,
+      size: 6,
+      maxRadius: 50,
+      thickness: 4,
+      life: 0.25,
+      maxLife: 0.25,
+      alpha: 1
+    });
+
+    // Bright flash at start
+    renderer.particles.push({
+      type: 'flare',
+      x: fx, y: fy,
+      color: '#FFFFFF',
+      size: 14,
+      life: 0.15,
+      maxLife: 0.15,
+      alpha: 1
+    });
+
+    // Camera shake
+    renderer.shakeCamera(4, 120);
+  }
+
+  spawnDashTrailEffect(dt) {
+    if (!window.game || !window.game.renderer) return;
+    const renderer = window.game.renderer;
+
+    this.dashAfterimageTimer += dt;
+    // Throttle trail spawn to every 0.04s instead of every frame
+    if (this.dashAfterimageTimer < 0.04) return;
+    this.dashAfterimageTimer = 0;
+
+    const fx = this.x + this.width / 2 - this.facing * (this.width * 0.3);
+    const fy = this.y + this.height / 2;
+
+    // Trail particle: 1 streak behind the fighter
+    renderer.addParticle(
+      fx,
+      fy + (Math.random() - 0.5) * this.height * 0.6,
+      Math.random() > 0.5 ? this.color : '#FFD700',
+      { x: -this.facing * 50, y: (Math.random() - 0.5) * 20 },
+      0.2,
+      2,
+      'spark',
+      { gravity: 0 }
+    );
+  }
+
+  spawnDashEndEffect() {
+    if (!window.game || !window.game.renderer) return;
+    const renderer = window.game.renderer;
+
+    const fx = this.x + this.width / 2;
+    const fy = this.y + this.height / 2;
+
+    // Small spark puff at end
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 * i) / 6;
+      const speed = 80 + Math.random() * 60;
+      renderer.addParticle(
+        fx, fy,
+        i % 2 === 0 ? this.color : '#FFD700',
+        { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+        0.3,
+        2 + Math.random() * 2,
+        'spark',
+        { gravity: 200 }
+      );
+    }
+
+    // Afterimage slash arc (subtle whoosh)
+    renderer.addSlash(
+      fx, fy,
+      -this.facing > 0 ? -Math.PI / 6 : Math.PI - Math.PI / 6,
+      40,
+      this.color,
+      4,
+      0.18
+    );
   }
   
   updateAttack(dt) {
@@ -330,44 +419,32 @@ export class Fighter {
     this.attackElapsed += dt;
     this.attackProgress = Math.min(1, this.attackElapsed / totalDuration);
     
-    // Check attack phases
     if (this.animFrame < attack.startup) {
-      // Startup
       this.hitboxActive = false;
       this.hitbox = null;
     } else if (this.animFrame < attack.startup + attack.active) {
-      // Active
       this.hitboxActive = true;
       this.updateHitbox(attack);
     } else if (this.animFrame < attack.startup + attack.active + attack.recovery) {
-      // Recovery
       this.hitboxActive = false;
       this.hitbox = null;
     } else {
-      // Finished - check if we can chain into next combo
       this.hitbox = null;
       this.hitboxActive = false;
       this.currentAttack = null;
       this.hitLanded = false;
-      this.isAttacking = false;
       this.attackProgress = 0;
       this.attackElapsed = 0;
       this.attackDuration = 0;
       
-      // Reset combo if too much time passed
       const now = performance.now();
       if (now - this.lastAttackTime > 800) {
         this.comboStep = 0;
         this.comboType = null;
       }
       
-      // Return to appropriate state
       if (this.onGround) {
-        if (this.state === 'airAttack' || this.state === 'crouchAttack') {
-          this.setState('idle');
-        } else {
-          this.setState('idle');
-        }
+        this.setState('idle');
       } else {
         this.setState('jump');
       }
@@ -377,26 +454,36 @@ export class Fighter {
   updateHitbox(attack) {
     const offset = attack.hitboxOffset;
     const size = attack.hitboxSize;
-    
+
+    const centerX = this.x + this.width / 2;
+    const bottomY = this.y + this.height;
+    const handY = bottomY - 40;
+    const frontEdgeX = centerX + (this.facing === 1 ? 40 : -40);
+
     this.hitbox = {
-      x: this.x + (this.facing === 1 ? offset.x : -offset.x - size.width + this.width),
-      y: this.y + offset.y,
+      x: this.facing === 1
+        ? frontEdgeX + offset.x
+        : frontEdgeX - offset.x - size.width,
+      y: handY + offset.y,
       width: size.width,
       height: size.height
     };
   }
-  
+
   updateHurtbox() {
+    const centerX = this.x + this.width / 2;
+    const bottomY = this.y + this.height;
     this.hurtbox = {
-      x: this.x,
-      y: this.y,
-      width: this.width,
-      height: this.height
+      x: centerX - 40,
+      y: bottomY - 80,
+      width: 80,
+      height: 80
     };
   }
   
-  setState(newState, duration = 0) {
-    if (this.state === newState && newState !== 'attack' && newState !== 'attack2' && newState !== 'attack3' && newState !== 'heavyAttack' && newState !== 'heavyAttack2' && newState !== 'special' && newState !== 'airAttack' && newState !== 'crouchAttack') return;
+  setState(newState) {
+    const attackStates = ['attack', 'attack2', 'attack3', 'heavyAttack', 'heavyAttack2', 'special', 'airAttack', 'crouchAttack'];
+    if (this.state === newState && !attackStates.includes(newState)) return;
     this.state = newState;
     this.animFrame = 0;
   }
@@ -404,17 +491,12 @@ export class Fighter {
   takeDamage(damage) {
     this.health -= damage;
     if (this.health < 0) this.health = 0;
-    this.isHit = true;
-    // Reset hit flag after short delay
-    setTimeout(() => { this.isHit = false; }, 300);
   }
   
   render(renderer, inputManager) {
-    // Delegate to renderer
     renderer.drawFighter(this);
     
-    // Debug hitboxes
-    if (inputManager.isKeyPressed('KeyH')) {
+    if (inputManager && inputManager.isKeyPressed('KeyH')) {
       renderer.drawHurtbox(this.hurtbox);
       if (this.hitboxActive) {
         renderer.drawHitbox(this.hitbox);

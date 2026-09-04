@@ -1,7 +1,7 @@
 {
-  "name": "fighting-game-pixelart",
+  "name": "fighting-game-2d",
   "version": "1.0.0",
-  "description": "Pixel Art Fighting Game - 2D Fighting Mechanics with Kenney Assets",
+  "description": "2D Pixel Art Fighting Game - Shinobi vs Samurai with Japanese dojo arena",
   "main": "src/main.js",
   "scripts": {
     "dev": "vite",

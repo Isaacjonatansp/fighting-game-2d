@@ -235,53 +235,40 @@ export class Game {
     this.round++;
     this.roundTimer = this.config.roundTime;
     this.roundOver = false;
-    
-    // Reset fighters
+
+    // Reset fighters to 2D start positions
     this.fighter1.reset(200, this.config.groundY - this.config.fighterHeight, 1);
-    this.fighter2.reset(
-      this.config.width - 200 - this.config.fighterWidth, 
-      this.config.groundY - this.config.fighterHeight, 
-      -1
-    );
+    this.fighter2.reset(this.config.width - 200 - this.config.fighterWidth, this.config.groundY - this.config.fighterHeight, -1);
   }
-  
+
   endMatch(winner) {
     this.matchOver = true;
     this.winnerText.textContent = `PLAYER ${winner} WINS!`;
     this.matchOverEl.classList.add('visible');
   }
-  
+
   restartMatch() {
     this.matchOver = false;
     this.round = 1;
     this.roundWins = { 1: 0, 2: 0 };
     this.roundTimer = this.config.roundTime;
     this.matchOverEl.classList.remove('visible');
-    
+
     // Reset round dots and score labels
     this.roundCounter.querySelectorAll('.round-dot').forEach(dot => dot.classList.remove('won'));
     if (this.p1ScoreEl) this.p1ScoreEl.textContent = '0';
     if (this.p2ScoreEl) this.p2ScoreEl.textContent = '0';
-    
-    // Reset fighters
+
+    // Reset fighters to 2D start positions
     this.fighter1.reset(200, this.config.groundY - this.config.fighterHeight, 1);
-    this.fighter2.reset(
-      this.config.width - 200 - this.config.fighterWidth, 
-      this.config.groundY - this.config.fighterHeight, 
-      -1
-    );
+    this.fighter2.reset(this.config.width - 200 - this.config.fighterWidth, this.config.groundY - this.config.fighterHeight, -1);
   }
-  
+
   render() {
-    // Update 3D model positions to match fighter state
-    this.renderer.updateFighterAnimation(this.fighter1, this.deltaTime);
-    this.renderer.updateFighterAnimation(this.fighter2, this.deltaTime);
-    
-    // Render 3D scene
     this.renderer.render();
   }
-  
+
   renderHitboxes() {
-    // Hitboxes are now handled in 3D space
+    // Debug hitboxes handled in Fighter.render()
   }
 }

@@ -84,26 +84,23 @@ export class CombatSystem {
       window.game.registerHit(attacker.id, damage);
     }
     
-    // Visual effects - character-styled attack effects
+    // Visual effects - use attacker's color & movement
     const attackType = attacker.currentAttack ? attacker.currentAttack.type : 'attack';
-    const attackerColor = attacker.color || (attacker.character === 'Shinobi' ? '#00E5FF' : '#FF3D00');
-    const attackerChar = attacker.character || (attacker.id === 1 ? 'Shinobi' : 'Samurai');
+    const attackerColor = attacker.color || '#D4AF37';
     const defenderX = defender.x + defender.width / 2;
     const defenderY = defender.y + defender.height / 2;
-    const attackKey = attacker.state || 'attack';
-    const comboStep = attacker.comboStep || 1;
+    const attackerFacing = attacker.facing;
     
-    this.spawnHitEffect(defenderX, defenderY, attackType, attackerColor, attacker.velocityX, attackerChar, attacker.facing, attackKey, comboStep);
+    this.spawnHitEffect(defenderX, defenderY, attackType, attackerColor, attacker.velocityX, damage, attackerFacing);
     
     // Screen shake on hit
     if (window.game && window.game.renderer) {
-      const isHeavy = attackType === 'heavy' || attackType === 'special';
-      const shakeIntensity = isHeavy ? 14 : 7;
-      window.game.renderer.shakeCamera(shakeIntensity, isHeavy ? 240 : 150);
+      const shakeIntensity = attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special') ? 15 : 8;
+      window.game.renderer.shakeCamera(shakeIntensity, 250);
       
       // Screen flash for heavy/special
-      if (isHeavy) {
-        window.game.renderer.flashScreen(attackerChar === 'Shinobi' ? '#00E5FF' : '#FF3D00', 100);
+      if (attacker.currentAttack && (attacker.currentAttack.type === 'heavy' || attacker.currentAttack.type === 'special')) {
+        window.game.renderer.flashScreen('#FFFFFF', 120);
       }
     }
   }
@@ -120,9 +117,7 @@ export class CombatSystem {
     attacker.velocityX = -1 * direction;
     
     // Visual effects
-    const defenderColor = defender.color || (defender.character === 'Shinobi' ? '#00E5FF' : '#FF3D00');
-    const defenderChar = defender.character || (defender.id === 1 ? 'Shinobi' : 'Samurai');
-    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, defenderColor, defenderChar, defender.facing);
+    this.spawnBlockEffect(defender.x + defender.width / 2, defender.y + defender.height / 2, defender.color);
     
     // Subtle screen shake on block
     if (window.game && window.game.renderer) {
@@ -130,36 +125,126 @@ export class CombatSystem {
     }
   }
   
-  spawnHitEffect(x, y, attackType, attackerColor, attackerVelocityX = 0, attackerChar = 'Shinobi', facing = 1, attackKey = 'attack', comboStep = 1) {
+  spawnHitEffect(x, y, attackType, attackerColor, attackerVelocityX = 0, damage = 0, attackerFacing = 1) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
-    if (renderer.spawnCharacterHitEffect) {
-      renderer.spawnCharacterHitEffect(x, y, attackType, attackerColor, attackerVelocityX, attackerChar, facing, attackKey, comboStep);
-      return;
-    }
+    const isHeavy = attackType === 'heavy';
+    const isSpecial = attackType === 'special';
+    const isLight = attackType === 'light' || attackType === 'light2' || attackType === 'light3';
     
-    const isHeavy = attackType === 'heavy' || attackType === 'special';
+    // Use attacker's color for particles
     const primaryColor = attackerColor;
     const secondaryColor = this.lightenColor(attackerColor, 40);
     const sparkColor = '#FFFFFF';
-    const particleCount = isHeavy ? 35 : 18;
+    const goldColor = '#FFD700';
     
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
-      const speed = isHeavy ? (7 + Math.random() * 10) : (4 + Math.random() * 6);
-      const size = isHeavy ? (4 + Math.random() * 4) : (2 + Math.random() * 3);
-      const life = isHeavy ? (0.6 + Math.random() * 0.4) : (0.4 + Math.random() * 0.3);
-      const vx = Math.cos(angle) * speed * 35;
-      const vy = Math.sin(angle) * speed * 35 - 40;
+    // === SLASH ARC (curved blade trail) ===
+    // Direction: facing the defender (opposite of attacker's facing)
+    const slashDir = -attackerFacing; // slash comes from attacker's side
+    const slashAngle = slashDir > 0 ? -Math.PI / 6 : Math.PI - Math.PI / 6;
+    const slashLength = isSpecial ? 110 : (isHeavy ? 85 : 60);
+    const slashThickness = isSpecial ? 12 : (isHeavy ? 9 : 6);
+    const slashLife = isSpecial ? 0.35 : (isHeavy ? 0.28 : 0.2);
+    renderer.addSlash(x, y, slashAngle, slashLength, primaryColor, slashThickness, slashLife);
+    
+    // Secondary cross slash for heavy/special
+    if (isHeavy || isSpecial) {
+      const crossAngle = slashAngle + Math.PI / 2;
+      renderer.addSlash(x, y, crossAngle, slashLength * 0.7, secondaryColor, slashThickness * 0.7, slashLife * 0.8);
+    }
+    
+    // === SHOCKWAVE RING (expanding impact) ===
+    const shockwaveCount = isSpecial ? 2 : (isHeavy ? 1 : 1);
+    for (let i = 0; i < shockwaveCount; i++) {
+      setTimeout(() => {
+        if (!renderer || !renderer.particles) return;
+        renderer.particles.push({
+          type: 'shockwave',
+          x, y,
+          color: i === 0 ? primaryColor : secondaryColor,
+          size: 6,
+          maxRadius: isSpecial ? 70 : (isHeavy ? 50 : 30),
+          thickness: isSpecial ? 4 : (isHeavy ? 3 : 2),
+          life: isSpecial ? 0.35 : (isHeavy ? 0.28 : 0.2),
+          maxLife: isSpecial ? 0.35 : (isHeavy ? 0.28 : 0.2),
+          alpha: 1
+        });
+      }, i * 50);
+    }
+    
+    // === SPARK BURST (radial streaks) ===
+    const sparkCount = isSpecial ? 18 : (isHeavy ? 14 : 8);
+    const moveDirection = attackerVelocityX > 0 ? 1 : (attackerVelocityX < 0 ? -1 : 0);
+    for (let i = 0; i < sparkCount; i++) {
+      const baseAngle = (Math.PI * 2 * i) / sparkCount;
+      const moveBias = moveDirection * 0.4;
+      const angle = baseAngle + (Math.random() - 0.5) * 0.6 + moveBias;
+      
+      const speed = isSpecial ? (8 + Math.random() * 10) : (isHeavy ? (6 + Math.random() * 8) : (4 + Math.random() * 5));
+      const size = isSpecial ? (2.5 + Math.random() * 2) : (isHeavy ? (2 + Math.random() * 2) : (1.5 + Math.random() * 1.5));
+      const life = isSpecial ? (0.5 + Math.random() * 0.3) : (isHeavy ? (0.4 + Math.random() * 0.25) : (0.3 + Math.random() * 0.2));
+      
+      const vx = Math.cos(angle) * speed * 30 + attackerVelocityX * 0.3;
+      const vy = Math.sin(angle) * speed * 30 - 40;
+      
+      const color = i % 4 === 0 ? goldColor : (i % 3 === 0 ? sparkColor : (i % 2 === 0 ? primaryColor : secondaryColor));
       
       renderer.addParticle(
-        x, y, 
-        i % 3 === 0 ? sparkColor : (i % 2 === 0 ? primaryColor : secondaryColor),
+        x, y,
+        color,
         { x: vx, y: vy },
         life,
-        size
+        size,
+        'spark',
+        { gravity: 200 }
       );
+    }
+    
+    // === CENTRAL FLARE (bright burst at impact point) ===
+    renderer.particles.push({
+      type: 'flare',
+      x, y,
+      color: isSpecial ? '#FFFFFF' : primaryColor,
+      size: isSpecial ? 16 : (isHeavy ? 12 : 8),
+      life: isSpecial ? 0.2 : (isHeavy ? 0.16 : 0.12),
+      maxLife: isSpecial ? 0.2 : (isHeavy ? 0.16 : 0.12),
+      alpha: 1
+    });
+    
+    // === DAMAGE NUMBER ===
+    if (damage > 0) {
+      renderer.addDamageNumber(x, y - 30, damage, isHeavy || isSpecial);
+    }
+    
+    // === DEBRIS (small chunks flying off) ===
+    if (isHeavy || isSpecial) {
+      const debrisCount = isSpecial ? 5 : 3;
+      for (let i = 0; i < debrisCount; i++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+        const speed = 60 + Math.random() * 100;
+        renderer.addParticle(
+          x, y,
+          i % 2 === 0 ? '#FFD700' : '#FF6B35',
+          { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+          0.5 + Math.random() * 0.25,
+          1.5 + Math.random() * 1.5,
+          'circle',
+          { gravity: 500 }
+        );
+      }
+    }
+    
+    // === SCREEN SHAKE & FLASH ===
+    if (isSpecial) {
+      renderer.shakeCamera(18, 400);
+      renderer.triggerScreenFlash('#FFFFFF', 180);
+    } else if (isHeavy) {
+      renderer.shakeCamera(12, 300);
+      renderer.triggerScreenFlash('#FFFFFF', 150);
+    } else {
+      renderer.shakeCamera(5, 150);
+      renderer.triggerScreenFlash(primaryColor, 80);
     }
   }
   
@@ -173,27 +258,43 @@ export class CombatSystem {
     return '#' + (0x1000000 + (R << 16) + (G << 8) + B).toString(16).slice(1);
   }
   
-  spawnBlockEffect(x, y, defenderColor, defenderChar = 'Shinobi', facing = 1) {
+spawnBlockEffect(x, y, defenderColor) {
     if (!window.game || !window.game.renderer) return;
     
     const renderer = window.game.renderer;
-    if (renderer.spawnCharacterBlockEffect) {
-      renderer.spawnCharacterBlockEffect(x, y, defenderColor, defenderChar, facing);
-      return;
-    }
+    const primaryColor = defenderColor || '#D4AF37';
+    const secondaryColor = this.lightenColor(primaryColor, 40);
+    const sparkColor = '#FFFFFF';
     
-    const primaryColor = defenderColor || '#00E5FF';
-    for (let i = 0; i < 14; i++) {
-      const angle = (facing > 0 ? Math.PI : 0) + (Math.random() - 0.5) * Math.PI * 0.6;
-      const speed = 5 + Math.random() * 8;
+    // Block spark burst - colored to defender
+    for (let i = 0; i < 16; i++) {
+      const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.7;
+      const speed = 6 + Math.random() * 10;
       renderer.addParticle(
-        x, y, i % 2 === 0 ? primaryColor : '#FFFFFF',
-        { x: Math.cos(angle) * speed * 30, y: Math.sin(angle) * speed * 30 - 30 },
-        0.3 + Math.random() * 0.2,
-        3 + Math.random() * 3
+        x, y, i % 3 === 0 ? sparkColor : (i % 2 === 0 ? primaryColor : secondaryColor),
+        { x: Math.cos(angle) * speed * 35, y: Math.sin(angle) * speed * 35 - 40 },
+        0.4 + Math.random() * 0.3,
+        3 + Math.random() * 4
       );
     }
-    renderer.shakeCamera(5, 120);
+    
+    // Parry flash ring
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        if (renderer && renderer.addParticle) {
+          renderer.addParticle(
+            x, y, i % 2 === 0 ? primaryColor : secondaryColor,
+            { x: 0, y: 0 },
+            0.15,
+            12 + i * 8
+          );
+        }
+      }, i * 15);
+    }
+    
+    // Screen shake & flash
+    renderer.shakeCamera(6, 180);
+    renderer.triggerScreenFlash(primaryColor, 100);
   }
   
   // Attack definitions
@@ -206,7 +307,7 @@ export class CombatSystem {
       startup: 0.08,
       active: 0.12,
       recovery: 0.15,
-      hitboxOffset: { x: 40, y: 20 },
+      hitboxOffset: { x: 10, y: -5 },
       hitboxSize: { width: 50, height: 40 }
     },
     light2: {
@@ -217,7 +318,7 @@ export class CombatSystem {
       startup: 0.06,
       active: 0.1,
       recovery: 0.12,
-      hitboxOffset: { x: 45, y: 15 },
+      hitboxOffset: { x: 10, y: 0 },
       hitboxSize: { width: 55, height: 45 }
     },
     light3: {
@@ -228,7 +329,7 @@ export class CombatSystem {
       startup: 0.1,
       active: 0.15,
       recovery: 0.25,
-      hitboxOffset: { x: 50, y: 10 },
+      hitboxOffset: { x: 10, y: 5 },
       hitboxSize: { width: 65, height: 55 }
     },
     heavy: {
@@ -239,7 +340,7 @@ export class CombatSystem {
       startup: 0.15,
       active: 0.18,
       recovery: 0.3,
-      hitboxOffset: { x: 45, y: 15 },
+      hitboxOffset: { x: 10, y: 0 },
       hitboxSize: { width: 60, height: 50 }
     },
     heavy2: {
@@ -250,7 +351,7 @@ export class CombatSystem {
       startup: 0.12,
       active: 0.2,
       recovery: 0.35,
-      hitboxOffset: { x: 50, y: 10 },
+      hitboxOffset: { x: 10, y: 5 },
       hitboxSize: { width: 70, height: 60 }
     },
     special: {
@@ -261,7 +362,7 @@ export class CombatSystem {
       startup: 0.25,
       active: 0.25,
       recovery: 0.45,
-      hitboxOffset: { x: 50, y: 10 },
+      hitboxOffset: { x: 10, y: 5 },
       hitboxSize: { width: 70, height: 60 }
     },
     crouchLight: {
@@ -272,7 +373,7 @@ export class CombatSystem {
       startup: 0.08,
       active: 0.12,
       recovery: 0.18,
-      hitboxOffset: { x: 35, y: 50 },
+      hitboxOffset: { x: 10, y: 15 },
       hitboxSize: { width: 45, height: 30 }
     },
     airLight: {
@@ -283,7 +384,7 @@ export class CombatSystem {
       startup: 0.1,
       active: 0.15,
       recovery: 0.2,
-      hitboxOffset: { x: 40, y: 25 },
+      hitboxOffset: { x: 10, y: -10 },
       hitboxSize: { width: 50, height: 40 }
     }
   };
