@@ -90,26 +90,34 @@ export class Game {
   }
   
   update(dt) {
-    // Handle hit pause
+    // Hit pause: gameplay freezes, but FX keep advancing in slow motion so
+    // the impact reads instead of the screen going dead.
     if (this.hitPauseTimer > 0) {
       this.hitPauseTimer -= dt;
-      if (this.hitPauseTimer <= 0) {
-        this.hitPauseTimer = 0;
-      } else {
-        // Skip normal update during hit pause
-        this.renderer.updateCamera(dt);
-        this.renderer.updateParticles(dt);
-        return;
-      }
+
+      // FX slow-mo ramps 0.15x -> 1x across the freeze for a snappy release.
+      const t = 1 - Math.max(0, this.hitPauseTimer) / (this.hitPauseDuration || 1);
+      const timeScale = 0.15 + 0.85 * t * t;
+
+      this.renderer.updateCamera(dt);
+      this.renderer.updateEffects(dt * timeScale);
+      this.renderer.setSlowMo(1 - timeScale);
+
+      if (this.hitPauseTimer > 0) return;
+      this.hitPauseTimer = 0;
+      this.renderer.setSlowMo(0);
     }
-    
+
     // Update input FIRST - store previous frame state
     this.inputManager.update();
-    
+
     // Update camera and renderer effects
     this.renderer.updateCamera(dt);
-    this.renderer.updateParticles(dt);
-    
+    this.renderer.updateEffects(dt);
+
+    // Attack swing trails
+    this.updateAttackAfterimages(dt);
+
     // Update fighters
     this.fighter1.update(dt, this.inputManager, this.fighter2, this.config);
     this.fighter2.update(dt, this.inputManager, this.fighter1, this.config);
@@ -158,6 +166,34 @@ export class Game {
     this.updateHealthBars();
   }
   
+  // Emits ghost images while an attack is in its active window, so the blade
+  // swing leaves a visible smear instead of only a static frame.
+  updateAttackAfterimages(dt) {
+    for (const fighter of [this.fighter1, this.fighter2]) {
+      if (!fighter) continue;
+
+      const attack = fighter.currentAttack;
+      if (!attack || !fighter.hitboxActive) {
+        fighter.fxAfterimageTimer = 0;
+        continue;
+      }
+
+      const isBig = attack.type === 'heavy' || attack.type === 'special';
+      const interval = isBig ? 0.028 : 0.045;
+
+      fighter.fxAfterimageTimer = (fighter.fxAfterimageTimer || 0) + dt;
+      if (fighter.fxAfterimageTimer < interval) continue;
+      fighter.fxAfterimageTimer = 0;
+
+      this.renderer.addAfterimage(fighter, {
+        color: fighter.color || '#FFFFFF',
+        life: isBig ? 0.26 : 0.18,
+        strength: isBig ? 0.6 : 0.4,
+        offset: 6
+      });
+    }
+  }
+
   updateComboDisplay(dt) {
     if (this.currentCombo > 0) {
       this.comboTimer -= dt;
@@ -183,10 +219,17 @@ export class Game {
       this.comboCounter.classList.add('visible');
     }
     
-    // Trigger hit pause
+    // Trigger hit pause. The heavier the blow, the longer the freeze —
+    // this is what makes impacts feel like they connect.
     const isHeavy = hitType === 'heavy' || hitType === 'special';
-    this.hitPauseDuration = isHeavy ? 0.15 : 0.08;
+    this.hitPauseDuration = isHeavy ? 0.2 : 0.11;
     this.hitPauseTimer = this.hitPauseDuration;
+
+    // Stronger pause on the finishing blow of a round.
+    if (this.fighter1.health <= 0 || this.fighter2.health <= 0) {
+      this.hitPauseDuration = 0.55;
+      this.hitPauseTimer = 0.55;
+    }
   }
   
   updateHealthBars() {

@@ -89,6 +89,9 @@ renderer.game = game;
 // Set renderer on stage
 stage.setRenderer(renderer);
 
+// Camera needs to know the real arena extents before the first frame.
+renderer.syncArenaBounds(stage);
+
 // Start game loop
 game.start();
 

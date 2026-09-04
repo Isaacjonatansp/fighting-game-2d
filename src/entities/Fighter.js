@@ -320,17 +320,7 @@ export class Fighter {
     }
 
     // Quick shockwave ring
-    renderer.particles.push({
-      type: 'shockwave',
-      x: fx, y: fy,
-      color: this.color,
-      size: 6,
-      maxRadius: 50,
-      thickness: 4,
-      life: 0.25,
-      maxLife: 0.25,
-      alpha: 1
-    });
+    renderer.addShockwave(fx, fy, this.color, 50, 4, 0.25);
 
     // Bright flash at start
     renderer.particles.push({
