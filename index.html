@@ -3,22 +3,280 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fighting Game 2D</title>
+  <title>Arcade Hub - 2 Games in 1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      background: #87CEEB;
+      background: #0d0e17;
       min-height: 100vh;
       font-family: 'Inter', sans-serif;
       color: #F5F5F7;
       overflow: hidden;
     }
-    #game-container { width: 100vw; height: 100vh; position: relative; }
-    canvas { display: block; width: 100%; height: 100%; }
-    #ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
+    /* Screen Views */
+    .view-screen {
+      display: none;
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      overflow: hidden;
+    }
+    .view-screen.active {
+      display: block;
+    }
+    #game-hub-view.active {
+      display: flex;
+    }
+
+    /* ==========================================================================
+       GAME HUB / SELECTOR STYLES
+       ========================================================================== */
+    #game-hub-view {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 25%, #1c1a2f 0%, #0c0b16 70%, #05050a 100%);
+      padding: 24px;
+      z-index: 50;
+    }
+
+    .hub-header {
+      text-align: center;
+      margin-bottom: clamp(24px, 5vh, 48px);
+    }
+    .hub-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(28px, 4.5vw, 54px);
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF4500 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 35px rgba(255, 215, 0, 0.4);
+      margin-bottom: 8px;
+    }
+    .hub-subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: clamp(13px, 1.4vw, 17px);
+      color: #A89F94;
+      letter-spacing: 0.08em;
+    }
+
+    .hub-cards-container {
+      display: flex;
+      gap: clamp(20px, 3.5vw, 48px);
+      max-width: 1050px;
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .game-card {
+      background: rgba(22, 23, 38, 0.85);
+      border: 1.5px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: clamp(20px, 3vh, 32px);
+      width: clamp(280px, 42vw, 440px);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(12px);
+      transition: all 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .game-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 4px;
+      background: #718096;
+      transition: all 300ms ease;
+    }
+    .game-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.75);
+    }
+
+    /* Card 1 Theme (Fighting Dojo) */
+    .card-fighting {
+      border-color: rgba(212, 175, 55, 0.35);
+    }
+    .card-fighting::before {
+      background: linear-gradient(90deg, #D4AF37, #FF3D00);
+    }
+    .card-fighting:hover {
+      border-color: #D4AF37;
+      box-shadow: 0 20px 40px rgba(212, 175, 55, 0.25), 0 0 20px rgba(255, 61, 0, 0.15);
+    }
+
+    /* Card 2 Theme (Cosmic Defender / Custom) */
+    .card-game2 {
+      border-color: rgba(0, 229, 255, 0.35);
+    }
+    .card-game2::before {
+      background: linear-gradient(90deg, #00E5FF, #E040FB);
+    }
+    .card-game2:hover {
+      border-color: #00E5FF;
+      box-shadow: 0 20px 40px rgba(0, 229, 255, 0.25), 0 0 20px rgba(224, 64, 251, 0.15);
+    }
+
+    .card-badge {
+      display: inline-block;
+      align-self: flex-start;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .card-fighting .card-badge {
+      background: rgba(212, 175, 55, 0.15);
+      color: #FFD700;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+    }
+    .card-game2 .card-badge {
+      background: rgba(0, 229, 255, 0.15);
+      color: #00E5FF;
+      border: 1px solid rgba(0, 229, 255, 0.4);
+    }
+
+    .card-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(20px, 2.4vw, 26px);
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: #B0B5C0;
+      line-height: 1.55;
+      margin-bottom: 20px;
+      flex-grow: 1;
+    }
+
+    .card-features {
+      list-style: none;
+      margin-bottom: 24px;
+      font-size: 12px;
+      color: #E2E8F0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-features li span {
+      font-size: 14px;
+    }
+
+    .btn-launch {
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 8px;
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 250ms ease;
+      border: none;
+    }
+    .card-fighting .btn-launch {
+      background: linear-gradient(135deg, #D4AF37 0%, #B8860B 100%);
+      color: #1A0307;
+      box-shadow: 0 4px 14px rgba(212, 175, 55, 0.35);
+    }
+    .card-fighting .btn-launch:hover {
+      background: linear-gradient(135deg, #FFE082 0%, #D4AF37 100%);
+      box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5);
+      transform: scale(1.02);
+    }
+
+    .card-game2 .btn-launch {
+      background: linear-gradient(135deg, #00E5FF 0%, #0091EA 100%);
+      color: #0A0D18;
+      box-shadow: 0 4px 14px rgba(0, 229, 255, 0.35);
+    }
+    .card-game2 .btn-launch:hover {
+      background: linear-gradient(135deg, #80DEEA 0%, #00E5FF 100%);
+      box-shadow: 0 6px 20px rgba(0, 229, 255, 0.5);
+      transform: scale(1.02);
+    }
+
+    .hub-footer-note {
+      margin-top: clamp(24px, 4vh, 36px);
+      text-align: center;
+      font-size: 12px;
+      color: #718096;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .hub-footer-note code {
+      color: #64FFDA;
+      font-family: monospace;
+    }
+
+    /* Floating Back to Menu Button */
+    .hub-back-btn {
+      position: absolute;
+      top: clamp(16px, 2.5vh, 24px);
+      left: clamp(16px, 2.5vw, 28px);
+      z-index: 100;
+      padding: 8px 16px;
+      background: rgba(13, 14, 23, 0.85);
+      border: 1.5px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      color: #F5F5F7;
+      font-family: 'Cinzel', serif;
+      font-size: clamp(10px, 1.2vw, 12px);
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+      transition: all 200ms ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+    .hub-back-btn:hover {
+      background: #FFFFFF;
+      color: #0d0e17;
+      border-color: #FFFFFF;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(255, 255, 255, 0.3);
+    }
+
+    /* ==========================================================================
+       GAME 1 (FIGHTING) STYLES
+       ========================================================================== */
+    #fighting-game-view {
+      background: #87CEEB;
+    }
+    #fighting-game-view canvas {
+      display: block; width: 100%; height: 100%;
+    }
+    #ui-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    }
     .health-bar-container { 
       position: absolute; top: clamp(20px, 3vh, 40px); height: clamp(16px, 2.5vh, 24px); 
       background: rgba(26, 3, 7, 0.8);
@@ -42,7 +300,7 @@
       overflow: hidden;
     }
     .stamina-bar-fill {
-      height: 100%;
+      height: 100%; 
       background: linear-gradient(90deg, #4FC3F7, #80DEEA, #E0F7FA);
       transition: width 120ms linear;
       box-shadow: 0 0 10px rgba(128, 222, 234, 0.8);
@@ -123,13 +381,7 @@
       color: #D4AF37; cursor: pointer; position: relative; overflow: hidden;
       transition: all 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
-    #match-over button::before {
-      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 0; height: 0; background: radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%);
-      border-radius: 50%; transition: width 400ms, height 400ms;
-    }
-    #match-over button:hover { color: #1A0307; }
-    #match-over button:hover::before { width: 300px; height: 300px; }
+    #match-over button:hover { color: #1A0307; background: #D4AF37; }
     .combo-counter {
       position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
       font-family: 'Cinzel', serif; font-size: 32px; font-weight: 700;
@@ -170,16 +422,127 @@
     .controls-toggle:hover {
       background: #D4AF37; color: #1A0307;
     }
-    .controls-hint.minimized .controls-toggle::before {
-      content: '+';
+    .controls-hint.minimized .controls-toggle::before { content: '+'; }
+    .controls-toggle::before { content: '−'; }
+
+    .control-group {
+      display: flex; flex-direction: column; gap: 4px;
     }
-    .controls-toggle::before {
-      content: '−';
+    .control-key {
+      display: inline-block; min-width: 18px; height: 18px; padding: 0 4px;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 3px; text-align: center; line-height: 16px;
+      font-family: monospace; font-size: 9px; color: #FFF;
+    }
+
+    /* ==========================================================================
+       GAME 2 (COSMIC DEFENDER) STYLES
+       ========================================================================== */
+    #game2-view {
+      background: #0a0d18;
+    }
+    #game2-view canvas {
+      display: block; width: 100%; height: 100%;
+    }
+    .game2-ui-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    }
+    .game2-controls-hint {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(16, 22, 38, 0.8);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 11px;
+      color: #80DEEA;
+      display: flex;
+      gap: 16px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    #game2-restart-btn {
+      position: absolute; top: clamp(16px, 2.5vh, 24px); right: clamp(16px, 2.5vw, 28px);
+      padding: 8px 16px;
+      background: rgba(16, 22, 38, 0.85);
+      border: 1px solid rgba(0, 229, 255, 0.5);
+      border-radius: 8px;
+      color: #00E5FF;
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all 200ms ease;
+    }
+    #game2-restart-btn:hover {
+      background: #00E5FF;
+      color: #0A0D18;
+      box-shadow: 0 0 16px rgba(0, 229, 255, 0.6);
     }
   </style>
 </head>
 <body>
-  <div id="game-container">
+
+  <!-- ======================================================================
+       1. GAME HUB / SELECTION SCREEN
+       ====================================================================== -->
+  <div id="game-hub-view" class="view-screen active">
+    <div class="hub-header">
+      <h1 class="hub-title">ARCADE PORTAL</h1>
+      <p class="hub-subtitle">PILIH GAME YANG INGIN DIMAINKAN</p>
+    </div>
+
+    <div class="hub-cards-container">
+      <!-- Card 1: Shinobi vs Samurai -->
+      <div class="game-card card-fighting">
+        <span class="card-badge">FIGHTING 2D • 2 PLAYERS</span>
+        <h2 class="card-title">Shinobi vs Samurai</h2>
+        <p class="card-desc">
+          Duel 1 lawan 1 antara Shinobi lincah dan Samurai tangguh di arena kuil dojo Jepang.
+          Dilengkapi sistem stamina, combo hits, dan serangan pamungkas.
+        </p>
+        <ul class="card-features">
+          <li><span>⚔️</span> Karakter Pixel Art & Animasi Halus</li>
+          <li><span>🎮</span> P1: WASD + JKL | P2: Panah + 123</li>
+          <li><span>🏆</span> Sistem Ronde Terbaik dari 3 (Best of 3)</li>
+        </ul>
+        <button class="btn-launch" id="btn-launch-fighting">
+          <span>▶</span> MAINKAN GAME 1
+        </button>
+      </div>
+
+      <!-- Card 2: Shadow of Destiny (Kesan 100% Serius & Hardcore) -->
+      <div class="game-card card-game2">
+        <span class="card-badge">DARK SOULS-LIKE • TACTICAL ACTION</span>
+        <h2 class="card-title">Shadow of Destiny: The Final Trial</h2>
+        <p class="card-desc">
+          Duel kehormatan samurai di bawah badai kuil kuno. Menuntut perhitungan parry presisi,
+          refleks tingkat tinggi, dan penguasaan katana untuk menghentikan sang Warlord kegelapan.
+        </p>
+        <ul class="card-features">
+          <li><span>⚔️</span> Sistem Pertarungan Katana & Precision Parrying</li>
+          <li><span>⚡</span> Visual Atmosferik Badai, Petir & Partikel Tajam</li>
+          <li><span>🩸</span> Tingkat Kesulitan Brutal untuk Penguji Mental</li>
+        </ul>
+        <button class="btn-launch" id="btn-launch-game2">
+          <span>▶</span> MULAI PERTARUNGAN (GAME 2)
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-footer-note">
+      ⚔️ Pilih game yang ingin kamu mainkan. Tekan tombol <strong>Menu Utama</strong> kapan saja untuk berganti game.
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       2. GAME 1 VIEW: 2D FIGHTING GAME
+       ====================================================================== -->
+  <div id="fighting-game-view" class="view-screen">
+    <button class="hub-back-btn" id="back-from-fighting">
+      <span>❮</span> MENU UTAMA
+    </button>
+
     <canvas id="game-canvas"></canvas>
     <div id="ui-overlay">
       <div id="p1-health" class="health-bar-container">
@@ -239,6 +602,19 @@
       </div>
     </div>
   </div>
+
+  <!-- ======================================================================
+       3. GAME 2 VIEW: SHADOW OF DESTINY (PARODI & TROLL BOSS FIGHT)
+       ====================================================================== -->
+  <div id="game2-view" class="view-screen">
+    <button class="hub-back-btn" id="back-from-game2">
+      <span>❮</span> MENU UTAMA
+    </button>
+    <button id="game2-restart-btn">ULANGI DUEL (RESTART)</button>
+
+    <canvas id="game2-canvas"></canvas>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -5,18 +5,29 @@ export class InputManager {
     this.prevKeys = new Map();
     this.justPressed = new Set(); // Keys pressed since last update()
     
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.onKeyUp(e));
-    
-    // Prevent default for game keys
-    window.addEventListener('keydown', (e) => {
+    this._onKeyDown = (e) => this.onKeyDown(e);
+    this._onKeyUp = (e) => this.onKeyUp(e);
+    this._onPreventDefault = (e) => {
       const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyJ', 'KeyK', 'KeyL',
                         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
                         'Digit1', 'Digit2', 'Digit3', 'Space', 'ShiftLeft', 'ShiftRight', 'Numpad0'];
       if (gameKeys.includes(e.code)) {
         e.preventDefault();
       }
-    });
+    };
+    
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('keydown', this._onPreventDefault);
+  }
+
+  destroy() {
+    window.removeEventListener('keydown', this._onKeyDown);
+    window.removeEventListener('keyup', this._onKeyUp);
+    window.removeEventListener('keydown', this._onPreventDefault);
+    this.keys.clear();
+    this.prevKeys.clear();
+    this.justPressed.clear();
   }
   
   onKeyDown(e) {

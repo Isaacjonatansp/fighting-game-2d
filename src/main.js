@@ -1,101 +1,99 @@
-// Main entry point - Fighting Game 2D (Pixel Art Characters)
-import { Game } from './core/Game.js';
-import { InputManager } from './systems/InputManager.js';
-import { TwoDRenderer } from './systems/TwoDRenderer.js';
-import { PhysicsEngine } from './systems/PhysicsEngine.js';
-import { CombatSystem } from './systems/CombatSystem.js';
-import { Fighter } from './entities/Fighter.js';
-import { Stage } from './entities/Stage.js';
+// ========================================================================
+// ARCADE PORTAL & GAME ROUTER (Main App Controller)
+// ========================================================================
+import { startFightingGame, stopFightingGame } from './games/fighting/index.js';
+import { startGame2, stopGame2 } from './games/game2/index.js';
 
-// Async init
-(async () => {
+let currentScreen = 'hub';
 
-// Game configuration
-const CONFIG = {
-  canvas: document.getElementById('game-canvas'),
-  width: 1280,
-  height: 720,
-  gravity: 1.2,
-  groundY: 580,
-  roundTime: 99,
-  maxRounds: 3,
-  fighterWidth: 56,
-  fighterHeight: 112
+const views = {
+  hub: document.getElementById('game-hub-view'),
+  fighting: document.getElementById('fighting-game-view'),
+  game2: document.getElementById('game2-view')
 };
 
-// Initialize systems
-const inputManager = new InputManager();
-const renderer = new TwoDRenderer(CONFIG);
-const physicsEngine = new PhysicsEngine(CONFIG);
-const combatSystem = new CombatSystem(CONFIG);
+export async function switchView(target) {
+  if (currentScreen === target) return;
 
-// Create fighters with pixel art characters
-const fighter1 = new Fighter({
-  id: 1,
-  x: 200,
-  y: CONFIG.groundY - CONFIG.fighterHeight,
-  width: CONFIG.fighterWidth,
-  height: CONFIG.fighterHeight,
-  color: '#00E5FF',
-  facing: 1,
-  character: 'Shinobi',
-  controls: {
-    left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS',
-    light: 'KeyJ', heavy: 'KeyK', special: 'KeyL', dash: 'Space', block: 'ShiftLeft'
+  // 1. Hentikan game yang sedang berjalan & bersihkan listener
+  if (currentScreen === 'fighting') {
+    stopFightingGame();
+  } else if (currentScreen === 'game2') {
+    stopGame2();
+  }
+
+  // 2. Sembunyikan semua layar
+  Object.values(views).forEach(el => {
+    if (el) el.classList.remove('active');
+  });
+
+  // 3. Tampilkan layar tujuan
+  const targetEl = views[target];
+  if (targetEl) {
+    targetEl.classList.add('active');
+  }
+  currentScreen = target;
+
+  // 4. Inisialisasi game yang dipilih
+  if (target === 'fighting') {
+    try {
+      await startFightingGame();
+    } catch (err) {
+      console.error('Error saat memulai Fighting Game:', err);
+    }
+  } else if (target === 'game2') {
+    try {
+      startGame2();
+    } catch (err) {
+      console.error('Error saat memulai Game 2:', err);
+    }
+  }
+}
+
+// Inisialisasi Tombol Navigasi
+document.addEventListener('DOMContentLoaded', () => {
+  const btnLaunchFighting = document.getElementById('btn-launch-fighting');
+  const btnLaunchGame2 = document.getElementById('btn-launch-game2');
+  const btnBackFromFighting = document.getElementById('back-from-fighting');
+  const btnBackFromGame2 = document.getElementById('back-from-game2');
+
+  if (btnLaunchFighting) {
+    btnLaunchFighting.addEventListener('click', () => switchView('fighting'));
+  }
+  if (btnLaunchGame2) {
+    btnLaunchGame2.addEventListener('click', () => switchView('game2'));
+  }
+  if (btnBackFromFighting) {
+    btnBackFromFighting.addEventListener('click', () => switchView('hub'));
+  }
+  if (btnBackFromGame2) {
+    btnBackFromGame2.addEventListener('click', () => switchView('hub'));
   }
 });
 
-const fighter2 = new Fighter({
-  id: 2,
-  x: CONFIG.width - 200 - CONFIG.fighterWidth,
-  y: CONFIG.groundY - CONFIG.fighterHeight,
-  width: CONFIG.fighterWidth,
-  height: CONFIG.fighterHeight,
-  color: '#FF3D00',
-  facing: -1,
-  character: 'Samurai',
-  controls: {
-    left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown',
-    light: 'Digit1', heavy: 'Digit2', special: 'Digit3', dash: 'Numpad0', block: 'ShiftRight'
+// Jalankan jika DOM sudah siap
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  const btnLaunchFighting = document.getElementById('btn-launch-fighting');
+  const btnLaunchGame2 = document.getElementById('btn-launch-game2');
+  const btnBackFromFighting = document.getElementById('back-from-fighting');
+  const btnBackFromGame2 = document.getElementById('back-from-game2');
+
+  if (btnLaunchFighting) {
+    btnLaunchFighting.addEventListener('click', () => switchView('fighting'));
   }
-});
+  if (btnLaunchGame2) {
+    btnLaunchGame2.addEventListener('click', () => switchView('game2'));
+  }
+  if (btnBackFromFighting) {
+    btnBackFromFighting.addEventListener('click', () => switchView('hub'));
+  }
+  if (btnBackFromGame2) {
+    btnBackFromGame2.addEventListener('click', () => switchView('hub'));
+  }
+}
 
-// Create stage
-const stage = new Stage(CONFIG);
-
-// Load character sprites
-await renderer.loadShinobiSprites();
-// No explosion loader needed
-
-// Initialize game
-const game = new Game({
-  config: CONFIG,
-  fighter1,
-  fighter2,
-  stage,
-  inputManager,
-  renderer,
-  physicsEngine,
-  combatSystem
-});
-
-// Set game reference on fighters for physics access to stage
-fighter1.game = game;
-fighter2.game = game;
-
-// Set renderer reference for camera
-renderer.game = game;
-
-// Set renderer on stage
-stage.setRenderer(renderer);
-
-// Camera needs to know the real arena extents before the first frame.
-renderer.syncArenaBounds(stage);
-
-// Start game loop
-game.start();
-
-// Global reference for debugging
-window.game = game;
-
-})();
+// Global router helper for debugging/console access
+window.arcadePortal = {
+  switchView,
+  getCurrentScreen: () => currentScreen
+};

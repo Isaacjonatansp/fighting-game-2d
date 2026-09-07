@@ -45,13 +45,14 @@ export class Game {
     this.hitPauseTimer = 0;
     this.hitPauseDuration = 0;
     
+    this._onResize = () => this.resizeCanvas();
     this.setupEventListeners();
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('resize', this._onResize);
   }
   
   setupEventListeners() {
-    this.restartBtn.addEventListener('click', () => this.restartMatch());
+    this.restartBtn?.addEventListener('click', () => this.restartMatch());
     const quickRestartBtn = document.getElementById('quick-restart-btn');
     if (quickRestartBtn) {
       quickRestartBtn.addEventListener('click', () => this.restartMatch());
@@ -74,6 +75,18 @@ export class Game {
     this.lastTime = performance.now();
     this.gameLoop(this.lastTime);
   }
+
+  stop() {
+    this.running = false;
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    window.removeEventListener('resize', this._onResize);
+    if (this.inputManager) {
+      this.inputManager.destroy();
+    }
+  }
   
   gameLoop(currentTime) {
     if (!this.running) return;
@@ -86,7 +99,7 @@ export class Game {
     }
     
     this.render();
-    requestAnimationFrame((time) => this.gameLoop(time));
+    this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
   }
   
   update(dt) {
