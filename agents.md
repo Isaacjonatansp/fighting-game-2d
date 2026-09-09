@@ -101,30 +101,34 @@ switchView('game2')     // Mulai Game 2
 **Entry**: `src/games/game2/index.js` → `startGame2()`
 **Logika utama**: `src/games/game2/Game2.js` (class `Game2`, self-contained)
 
-**Konsep**: Awalnya terlihat seperti game action serius, tapi makin lama makin kocak dan gajelas. Semua teks/dialog dalam **Bahasa Indonesia**.
+**Konsep**: Awalnya terlihat seperti game action serius, tapi makin lama makin kocak dan gajelas (~5-10 menit). Semua teks/dialog dalam **Bahasa Indonesia**.
 
 ### 6 Phase Gameplay
 
 | Phase | Nama | Mekanik |
 |-------|------|---------|
-| 1 | Duel Serius | Katana slash (J), parry (L), shadow dash (Shift/K), jump (W/Space/↑). Boss: Triple Dark Wave, Heavy Strike, Shadow Teleport. Target: kurangi HP boss ke 700. |
-| 2 | Kangkung + Sandal | Pedang jadi kangkung lemas. Tembak 10 sandal homing swallow (J). Boss lempar shuriken + jatuhkan kulit pisang (player bisa terpeleset). |
-| 3 | Baseball Bar + Tahu Bulat | Boss cabut health bar-nya sendiri dan pakai sebagai baseball bat. Player siram 8 ember air (J). Pick-up truck Tahu Bulat lewat arena tiap 10–16 detik (ada peringatan klakson 2.5s) — bisa stun boss jika kena. |
-| 4 | Paylater Bullet-Hell + Iklan YouTube Palsu | Boss tembak surat tagihan paylater (stun player). Overlay iklan YouTube palsu muncul dengan tombol skip yang kabur — klik 3x untuk dismiss. Survive 25 detik. |
-| 5 | Rhythm Kerokan | Minigame: tekan K saat cursor ada di sweet-spot (0.4–0.6) untuk kerokan punggung boss. Butuh 100% progress. Miss = boss complain dan dorong player. |
-| 6 | Ending Dangdut Hajatan | Mama boss telepon suruh pulang cuci piring. Layar tenda biru hajatan, disco light, duet dangdut. |
+| 1 | Duel Serius + ES TEH Troll | Katana slash (J), parry (L), shadow dash (Shift/K), jump (W/Space/↑). Boss: Triple Dark Wave, Heavy Strike, Shadow Teleport. Target: kurangi HP boss ke 700. Boss menjaga gelas ES TEH — kalau sempat minum: +120 HP boss. Gelas pindah tiap 13 detik. |
+| 2 | Kangkung + Sandal + Payung Emblem | Pedang jadi kangkung lemas. Tembak 12 sandal homing swallow (J). Boss lempar shuriken dobel + jatuhkan kulit pisang. Boss punya payung: tiap ~7 detik buka 4 detik — sandal dipantul balik (-8 HP player). Tekan F dekat boss = jemput payung (stun boss). |
+| 3 | Baseball Bar + Tahu Bulat | Boss cabut health bar-nya sendiri dan pakai sebagai baseball bat. Player siram 10 gayung air (J). Pick-up truck Tahu Bulat lewat tiap 7–13 detik (klakson 2.5s) — stun boss jika kena, -20 HP player jika tertabrak. |
+| 4 | Paylater Bullet-Hell + Iklan Palsu | Boss tembak surat tagihan paylater (stun) + tagihan MAKRO 10 juta (lebih besar/cepat, -22 HP). Iklan YouTube palsu, tombol skip kabur, klik 3x. Survive 40 detik. |
+| 5 | Rhythm Kerokan | Tekan K saat cursor di sweet-spot. Butuh 100% (12%/hit, combo x5 = bonus +6%). Sweet spot menyempit + speed naik tiap 25%. Miss = 4 dialog complain acak + dorong player. |
+| 6 | Ending Dangdut Hajatan | Mama boss telepon suruh pulang cuci piring. Layar tenda biru hajatan, disco light, duet dangdut, credits absurd. |
+
+**Tambahan Troll Global**: taunt absurd MALAKOR muncul acak tiap 14–22 detik (6 dialog), death reason selalu ditambah quip kocak acak, game over screen punya fun-fact acak. Estimasi durasi total: **5–10 menit**.
 
 ### Checkpoint System
 
 - `this.checkpointPhase` menyimpan phase terjauh yang dicapai
 - Saat Game Over, player restart dari checkpoint-nya (bukan dari Phase 1)
-- `resetToCheckpoint(phaseNum)` set ulang HP boss, senjata player, dan objective
+- `resetToCheckpoint(phaseNum)` set ulang HP boss, senjata player, objective, ES TEH, payung, dan rhythm bar (sweet spot/speed di-reset)
+- `resetGame()` = restart total dari Fase 1 (dipakai tombol restart UI di `index.js`)
 
 ### Canvas & Rendering
 
 - Resolusi internal: `1280 × 720`
 - CSS `style.width/height` di-set terpisah di `resize()` agar fill parent
-- Semua rendering manual via Canvas 2D API (tidak ada sprite sheet eksternal)
+- **Karakter pakai sprite sheet pixel art**: player = Shinobi sheet, boss = Samurai sheet dari `public/assets/shinobi-sprites/`. Semua frame 128×128 (Idle, Run, Jump, Attack_1/2, Hurt, Shield, Dead). Loader `_loadSprites()` + animasi `_getSpriteAnim()`/`_drawSprite()`; ada guard `typeof Image === 'undefined'` untuk headless test. Jika sheet gagal load → fallback ke gambar vector (shape manual). **Boss digambar 172×172 px, player 98×98 px** (boss ~1.75x lebih besar)
+- Elemen gameplay non-karakter (ES TEH, payung, truck, proyektil) tetap digambar manual via Canvas 2D API
 - Gunakan `ctx.roundRect()` — hanya didukung browser modern, tidak ada polyfill
 
 ### Physics (Game 2)

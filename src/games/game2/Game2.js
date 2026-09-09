@@ -1,7 +1,7 @@
 // ========================================================================
 // GAME 2: "SHADOW OF DESTINY" (CHALLENGING BUT BEATABLE TROLL EDITION)
 // ========================================================================
-// Gameplay panjang (~3-5 menit), penuh tantangan mekanik & rintangan kocak,
+// Gameplay panjang (~5-10 menit), penuh tantangan mekanik & rintangan kocak,
 // namun adil dan bisa ditamatkan berkat sistem Checkpoint per Fase!
 // ========================================================================
 
@@ -63,7 +63,7 @@ export class Game2 {
     // Rhythm Kerokan Bar (Fase 5)
     this.rhythmBar = {
       cursor: 0,
-      speed: 2.2,
+      speed: 2.6,
       dir: 1,
       sweetSpotMin: 0.4,
       sweetSpotMax: 0.6,
@@ -74,11 +74,46 @@ export class Game2 {
     // Objektif per Fase
     this.phaseObjectives = {
       phase2SandalHits: 0,
-      phase2SandalTarget: 10,
+      phase2SandalTarget: 12,
       phase3GayungHits: 0,
-      phase3GayungTarget: 8,
-      phase4SurvivalTimer: 25
+      phase3GayungTarget: 10,
+      phase4SurvivalTimer: 40
     };
+
+    // ES TEH TROLL (Fase 1) — Boss minum heal. Gelas dipecahkan atau heal leak
+    this.esTeh = {
+      active: false,
+      timer: 13,           // saat 0 → boss minum, +120 HP boss
+      x: 0,
+      y: 0,
+      shardHits: 0,        // jumlah gelas dipecahkan (pencegahan heal)
+      drinksBlocked: 0,
+      warningDialog: false
+    };
+
+    // PAYUNG TROLL (Fase 2) — boss buka payung = semua sandal dobel
+    this.payung = {
+      active: false,
+      timer: 7.0,
+      up: false,
+      upDuration: 0,
+      repelled: 0
+    };
+
+    // Troll taunts (muncul random)
+    this.absurdTauntTimer = 14;
+    this.absurdTaunts = [
+      'MALAKOR: "Gua udah beli tiket konser dangdut jam 9, cepetan selesaiin duelnya!"',
+      'MALAKOR: "Bukan gua sombong, tapi zirah gua beneran limited edition."',
+      'MALAKOR: "Kau tau ga? Ini arena sewa per jam, gua yang bayar internetnya."',
+      'MALAKOR: "Dulu gua jago main epep, makanya refleks gua gila."',
+      'MALAKOR: "Jangan mikir menang, mikirnya gimana pulangnya nanti."',
+      'MALAKOR: "Bar darah gua itu Kopral dulu, sekarang udah pensiun jadi tongkat."'
+    ];
+
+    // Sprite Sheets (Shinobi & Samurai pixel art)
+    this.sprites = {};
+    this._loadSprites();
 
     // UI & Dialog State
     this.dialog = null;
@@ -250,6 +285,97 @@ export class Game2 {
   }
 
   // ========================================================================
+  // SPRITE LOADER (pixel art Shinobi & Samurai)
+  // ========================================================================
+  _loadSprites() {
+    const base = '/assets/shinobi-sprites/';
+    const sheets = {
+      player: ['Idle', 'Run', 'Jump', 'Attack_1', 'Hurt', 'Shield'],
+      boss: ['Idle', 'Run', 'Attack_1', 'Attack_2', 'Hurt', 'Shield', 'Dead']
+    };
+    const FRAME_W = 128, FRAME_H = 128;
+
+    const load = (name, who, file) => new Promise((resolve) => {
+      if (typeof Image === 'undefined') { resolve(); return; } // headless / no DOM
+      const img = new Image();
+      img.onload = () => {
+        this.sprites[`${who}_${name}`] = {
+          img,
+          frames: Math.floor(img.width / FRAME_W),
+          frameW: FRAME_W,
+          frameH: FRAME_H
+        };
+        resolve();
+      };
+      img.onerror = () => resolve(); // gagal load = fallback ke vector draw
+      img.src = `${base}${who === 'player' ? 'Shinobi' : 'Samurai'}/${file}.png`;
+    });
+
+    const all = [];
+    for (const n of sheets.player) all.push(load(n, 'player', n));
+    for (const n of sheets.boss) all.push(load(n, 'boss', n));
+    Promise.all(all).then(() => { this.spritesReady = true; });
+  }
+
+  _getSpriteAnim(who) {
+    // Tentukan animasi berdasarkan state fisik
+    const p = who === 'player' ? this.player : this.boss;
+    const s = this.sprites;
+    const has = (k) => !!s[`${who}_${k}`];
+
+    if (p === this.player) {
+      if (p.isParrying && has('Shield')) return 'Shield';
+      if (p.hurtTimer > 0 && has('Hurt')) return 'Hurt';
+      if (!p.isGrounded && has('Jump')) return 'Jump';
+      if (p.isAttacking && has('Attack_1')) return 'Attack_1';
+      if (Math.abs(p.vx) > 20 && has('Run')) return 'Run';
+      return 'Idle';
+    } else {
+      if (this.phase === 5) return 'Idle'; // boss duduk encok = idle
+      if (p.hurtFlash > 0 && has('Hurt')) return 'Hurt';
+      if (p.isAttacking && has('Attack_2')) return 'Attack_2';
+      if (p.isAttacking && has('Attack_1')) return 'Attack_1';
+      if (Math.abs(p.vx || 0) > 20 && has('Run')) return 'Run';
+      return 'Idle';
+    }
+  }
+
+  _drawSprite(ctx, who, x, y, w, h, facing, tint = null) {
+    const key = `${who}_${this._getSpriteAnim(who)}`;
+    const sheet = this.sprites[key];
+    if (!sheet) return false; // fallback
+
+    const p = who === 'player' ? this.player : this.boss;
+    if (!p._animState) p._animState = { name: key, frame: 0, timer: 0 };
+    const a = p._animState;
+    if (a.name !== key) { a.name = key; a.frame = 0; a.timer = 0; }
+
+    const fpsMap = { Idle: 8, Run: 14, Attack_1: 16, Attack_2: 16, Jump: 10, Hurt: 10, Shield: 8, Dead: 6 };
+    a.timer += this._lastDt || 0.016;
+    const frameDur = 1 / (fpsMap[key.split('_')[0]] || fpsMap[key] || 10);
+    if (a.timer >= frameDur) {
+      a.timer -= frameDur;
+      const loopAnims = ['Idle', 'Run'];
+      const isLoop = loopAnims.some((n) => key.startsWith(n));
+      a.frame = isLoop ? (a.frame + 1) % sheet.frames : Math.min(a.frame + 1, sheet.frames - 1);
+    }
+
+    const fx = a.frame * sheet.frameW;
+    ctx.save();
+    ctx.translate(x + w / 2, y);
+    ctx.scale(facing === -1 ? -1 : 1, 1);
+    ctx.drawImage(sheet.img, fx, 0, sheet.frameW, sheet.frameH, -w / 2, 0, w, h);
+    if (tint) {
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = tint;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(-w / 2, 0, w, h);
+    }
+    ctx.restore();
+    return true;
+  }
+
+  // ========================================================================
   // INIT & CHECKPOINT
   // ========================================================================
   init() {
@@ -304,6 +430,7 @@ export class Game2 {
     this.particles = [];
     this.slashTrails = [];
     this.bananaPeels = [];
+    this.absurdTauntTimer = 14;
 
     // Reset Player
     this.player = {
@@ -323,7 +450,8 @@ export class Game2 {
       dashTimer: 0,
       weapon: phaseNum === 1 ? 'katana' : 'kangkung',
       stunTimer: 0,
-      slipTimer: 0
+      slipTimer: 0,
+      hurtTimer: 0
     };
 
     // Reset Boss
@@ -334,22 +462,44 @@ export class Game2 {
       h: 130,
       vx: 0,
       facing: -1,
-      hp: phaseNum === 1 ? 1000 : (phaseNum === 2 ? 700 : (phaseNum === 3 ? 500 : 300)),
-      maxHp: 1000,
+      hp: phaseNum === 1 ? 1000 : (phaseNum === 2 ? 700 : (phaseNum === 3 ? 500 : 300)),      maxHp: 1000,
       state: 'idle',
       attackTimer: 1.8,
       attackPattern: 0,
       isStaggered: false,
-      holdsHealthBar: phaseNum >= 3
+      holdsHealthBar: phaseNum >= 3,
+      hurtFlash: 0,
+      isAttacking: false,
+      _animState: null
     };
 
     // Reset Fase Objek
     this.phaseObjectives.phase2SandalHits = 0;
     this.phaseObjectives.phase3GayungHits = 0;
-    this.phaseObjectives.phase4SurvivalTimer = 25;
+    this.phaseObjectives.phase4SurvivalTimer = 40;
+
+    // ES TEH hanya di Fase 1
+    this.esTeh.active = phaseNum === 1;
+    this.esTeh.timer = 13;
+    this.esTeh.x = this.width / 2 + 120;
+    this.esTeh.y = 570;
+    this.esTeh.shardHits = 0;
+    this.esTeh.drinksBlocked = 0;
+    this.esTeh.warningDialog = false;
+
+    // PAYUNG hanya di Fase 2
+    this.payung.active = phaseNum === 2;
+    this.payung.timer = 7.0;
+    this.payung.up = false;
+    this.payung.upDuration = 0;
+    this.payung.repelled = 0;
 
     this.rhythmBar.progress = 0;
     this.rhythmBar.combo = 0;
+    this.rhythmBar.sweetSpotMin = 0.4;
+    this.rhythmBar.sweetSpotMax = 0.6;
+    this.rhythmBar.speed = 2.6;
+    this.milestone60Shown = false;
 
     this.fakeAd.active = phaseNum === 4;
     this.fakeAd.timer = 5;
@@ -411,6 +561,9 @@ export class Game2 {
       this.actionPlayerAttack();
     }
 
+    // Jemput Payung (F)
+    if (e.code === 'KeyF') this.actionJemputPayung();
+
     // Parry (L)
     if (e.code === 'KeyL' && !this.player.isParrying && this.player.stunTimer <= 0) {
       this.actionPlayerParry();
@@ -448,7 +601,13 @@ export class Game2 {
       if (adDist < 75) {
         this.fakeAd.btnX = Math.random() * (this.width - 350) + 100;
         this.fakeAd.btnY = Math.random() * 260 + 120;
-        this.fakeAd.taunt = 'Eits kabur! Nonton dulu iklannya! 📺';
+        const taunts = [
+          'Eits kabur! Nonton dulu iklannya! 📺',
+          'Pinter banget! Tapi tombolnya lebih pinter! 😂',
+          'Lari kemana-mana juga, iklannya gak ada skip-nya... eh ada kok, 3 kali! 🤭',
+          'Tanganmu cepet, tapi tombol iklan ini alumni lomba lari 17-an! 🏃'
+        ];
+        this.fakeAd.taunt = taunts[Math.floor(Math.random() * taunts.length)];
         this.playSqueakSound();
       }
     }
@@ -463,6 +622,7 @@ export class Game2 {
         if (this.fakeAd.clicksDone >= this.fakeAd.clicksNeeded) {
           this.fakeAd.active = false;
           this.showCheckpointBanner('🎉 IKLAN BERHASIL DITUTUP!');
+          this.setDialog('MALAKOR: "KOQ BISA?! Iklan Minyak Kapak termahal di Nusantara!"', 'boss', 3);
         } else {
           this.fakeAd.timer = 10;
           this.fakeAd.taunt = `Baru ${this.fakeAd.clicksDone}/${this.fakeAd.clicksNeeded} kali klik! Klik lagi! 😂`;
@@ -503,6 +663,7 @@ export class Game2 {
     if (!this.running) return;
     const rawDt = Math.min((time - this.lastTime) / 1000, 0.1);
     this.lastTime = time;
+    this._lastDt = rawDt;
 
     let dt = rawDt;
     if (this.slowMoTimer > 0) {
@@ -523,6 +684,7 @@ export class Game2 {
   actionPlayerAttack() {
     this.player.isAttacking = true;
     this.player.attackCooldown = 0.32;
+    this.player.hurtTimer = 0;
 
     // FASE 1: TEBASAN KATANA
     if (this.phase === 1) {
@@ -539,6 +701,8 @@ export class Game2 {
       if (dist < 130) {
         const damage = this.boss.isStaggered ? 90 : 45;
         this.boss.hp = Math.max(0, this.boss.hp - damage);
+        this.boss.hurtFlash = 0.25;
+        this.player.hurtTimer = 0;
         this.spawnSparks(this.boss.x + 45, this.boss.y + 50, '#FFD700', 16);
         this.screenShake = 6;
 
@@ -581,6 +745,28 @@ export class Game2 {
     }, 220);
   }
 
+  // JEMPUT PAYUNG (Fase 2) — balikin payung boss sebelum dia buka
+  actionJemputPayung() {
+    if (!this.payung.active) return;
+    if (this.payung.up) {
+      this.setDialog('KAMU: "Payungnya udah kebuka! Dasar suka ambilin!"', 'player', 2.2);
+      return;
+    }
+    // Harus deket boss biar bisa nyolong payungnya
+    const dist = Math.abs((this.player.x + 30) - (this.boss.x + 45));
+    if (dist < 140) {
+      this.payung.timer = 7.0; // reset timer, boss cari payung lagi (di angan-angannya)
+      this.setDialog('KAMU: "PAYUNGNYA GUA JEMPUT! EMBLEM! EMBLEM!"', 'player', 2.5);
+      this.showCheckpointBanner('☂️ Payung berhasil dijemput! Boss mengamuk!');
+      this.boss.isStaggered = true;
+      this.boss.attackTimer = 1.6;
+      this.playSqueakSound();
+      this.spawnSparks(this.boss.x + 45, this.boss.y + 40, '#FFEB3B', 20);
+    } else {
+      this.setDialog('KAMU: "Payungnya di tangan boss bang! Deketin dulu!"', 'player', 2);
+    }
+  }
+
   actionPlayerParry() {
     this.player.isParrying = true;
     this.playSwordSlashSound();
@@ -601,14 +787,32 @@ export class Game2 {
     // Cek apakah kursor berada di Sweet-Spot hijau (0.4 s.d 0.6)
     if (r.cursor >= r.sweetSpotMin && r.cursor <= r.sweetSpotMax) {
       // PERFECT KEROKAN!
-      r.progress = Math.min(100, r.progress + 14);
+      r.progress = Math.min(100, r.progress + 12);
       r.combo++;
       this.playKerokanSound();
       this.screenShake = 4;
-      this.showCheckpointBanner(`🔥 KEROKAN MANTAP! (${Math.floor(r.progress)}%)`);
 
+      // Combo bonus: tiap 5x combo beruntun = +6 ekstra
+      if (r.combo > 0 && r.combo % 5 === 0) {
+        r.progress = Math.min(100, r.progress + 6);
+        this.showCheckpointBanner(`🔥 KEROKAN COMBO x${r.combo}! BONUS +6%! (${Math.floor(r.progress)}%)`);
+      } else {
+        this.showCheckpointBanner(`🔥 KEROKAN MANTAP! (${Math.floor(r.progress)}%)`);
+      }
+
+      // Progress milestone dialog
       if (r.progress >= 100) {
         this.advanceToPhase(6);
+      } else if (r.progress >= 60 && !this.milestone60Shown) {
+        this.milestone60Shown = true;
+        this.setDialog('MALAKOR: "BAGUS... eh SALAH! Jangan kerok sembarangan bang!"', 'boss', 2.5);
+      }
+
+      // Tiap 25% progress, sweet spot menyempit (troll anti-ez)
+      if (Math.floor(r.progress / 25) > Math.floor((r.progress - 12) / 25)) {
+        r.sweetSpotMin = Math.min(0.46, r.sweetSpotMin + 0.02);
+        r.sweetSpotMax = Math.max(0.54, r.sweetSpotMax - 0.02);
+        this.showCheckpointBanner('⚠️ SWEET SPOT MENYEMPIT! Boss makin encok tapi makin cerewet!');
       }
     } else {
       // MISS: Kursor meleset
@@ -616,7 +820,13 @@ export class Game2 {
       this.playBonkSound();
       this.player.vx = -300;
       this.screenShake = 6;
-      this.setDialog('MALAKOR: "ADUH KEGELIAN BANG! Agak ke tengah dikit kerokannya!"', 'boss', 2.0);
+      const missDialogs = [
+        'MALAKOR: "ADUH KEGELIAN BANG! Agak ke tengah dikit kerokannya!"',
+        'MALAKOR: "Gatel jadi tambah gatel lu mah! Keroknya pas HIJAU bang, HIJAU!"',
+        'MALAKOR: "Pinggang gua retak tambahan gara-gara kerokan abal-abal!"',
+        'MALAKOR: "Kau ini beneran eks pemain gitar, jari gak bener!"'
+      ];
+      this.setDialog(missDialogs[Math.floor(Math.random() * missDialogs.length)], 'boss', 2.0);
     }
   }
 
@@ -631,26 +841,32 @@ export class Game2 {
 
     if (nextPhase === 2) {
       this.player.weapon = 'kangkung';
+      this.payung.active = true;
+      this.payung.timer = 7.0;
+      this.payung.up = false;
       this.playBonkSound();
       this.setDialog('KAMU: "LHO?! Pedang patah jadi kangkung?! Sandal Swallow... aktifkan!"', 'player', 4);
-      this.showCheckpointBanner('🚩 CHECKPOINT FASE 2: Hantam Boss 10x dengan Sandal!');
+      this.showCheckpointBanner('🚩 CHECKPOINT FASE 2: Hantam Boss 12x dengan Sandal! (F = Jemput Payung)');
     } else if (nextPhase === 3) {
       this.boss.holdsHealthBar = true;
       this.tahuBulat.active = true;
       this.playTeloletSound();
       this.setDialog('MALAKOR: "GUA CABUT BAR DARAH GUA SENDIRI BUAT MUKUL LU!"', 'boss', 4.5);
-      this.showCheckpointBanner('🚩 CHECKPOINT FASE 3: Siram Boss dengan 8 Gayung Air!');
+      this.showCheckpointBanner('🚩 CHECKPOINT FASE 3: Siram Boss dengan 10 Gayung Air!');
     } else if (nextPhase === 4) {
       this.fakeAd.active = true;
       this.fakeAd.timer = 5;
       this.setDialog('MALAKOR: "TERIMA BULLET-HELL TAGIHAN PAYLATER JATUH TEMPO!"', 'boss', 4.5);
-      this.showCheckpointBanner('🚩 CHECKPOINT FASE 4: Bertahan 25 Detik / Tutup Iklan!');
+      this.showCheckpointBanner('🚩 CHECKPOINT FASE 4: Bertahan 40 Detik / Tutup Iklan!');
     } else if (nextPhase === 5) {
       this.boss.state = 'sitting_encok';
       this.fakeAd.active = false;
+      this.milestone60Shown = false;
+      this.rhythmBar.sweetSpotMin = 0.4;
+      this.rhythmBar.sweetSpotMax = 0.6;
       this.playBonkSound();
       this.setDialog('MALAKOR: "ADUHHH PINGGANG GUA! Masuk angin... Tolong kerokin dong!"', 'boss', 5);
-      this.showCheckpointBanner('🚩 CHECKPOINT FASE 5: Tekan [K] Tepat di Area Hijau!');
+      this.showCheckpointBanner('🚩 CHECKPOINT FASE 5: Tekan [K] Tepat di Area Hijau! (Sweet spot menyempit tiap 25%)');
     } else if (nextPhase === 6) {
       this.victory = true;
       this.playDangdutEnding();
@@ -696,6 +912,46 @@ export class Game2 {
       if (this.slashTrails[i].life <= 0) this.slashTrails.splice(i, 1);
     }
 
+    // TAUNT ABSURD RANDOM (makin lama makin gajelas)
+    if (!this.gameOver && !this.victory && this.phase < 6) {
+      this.absurdTauntTimer -= dt;
+      if (this.absurdTauntTimer <= 0) {
+        this.absurdTauntTimer = Math.random() * 8 + 14;
+        if (!this.dialog) {
+          this.setDialog(this.absurdTaunts[Math.floor(Math.random() * this.absurdTaunts.length)], 'boss', 3.2);
+        }
+      }
+    }
+
+    // ES TEH TROLL (Fase 1)
+    if (this.esTeh.active && this.phase === 1) {
+      this.esTeh.timer -= dt;
+      // Boss jalan mendekati gelas ES TEH
+      const toGlass = this.esTeh.x - (this.boss.x + 45);
+      if (Math.abs(toGlass) > 30 && !this.boss.isStaggered) {
+        this.boss.x += Math.sign(toGlass) * 140 * dt;
+        this.boss.facing = Math.sign(toGlass) || 1;
+      } else {
+        this.boss.x = this.esTeh.x - 120;
+        this.boss.facing = 1;
+      }
+      // Warning dialog sekali saat 6 detik tersisa
+      if (this.esTeh.timer <= 6 && !this.esTeh.warningDialog) {
+        this.esTeh.warningDialog = true;
+        this.setDialog('MALAKOR: "SEBENTAR! ES TEH GUA NYARIS HANGAT! JANGAN DISENTUH!"', 'boss', 3);
+      }
+      // BOSS MINUM: +120 HP boss (troll heal!)
+      if (this.esTeh.timer <= 0) {
+        this.boss.hp = Math.min(1000, this.boss.hp + 120);
+        this.playSqueakSound();
+        this.screenShake = 8;
+        this.setDialog('MALAKOR: "SEGEER! Segarnya ES TEH anget! +120 HP dong bang!"', 'boss', 3);
+        this.esTeh.timer = 13;
+        this.esTeh.x = Math.random() * (this.width - 400) + 300;
+        this.esTeh.warningDialog = false;
+      }
+    }
+
     // Rhythm Bar Animation (Fase 5)
     if (this.phase === 5) {
       this.rhythmBar.cursor += this.rhythmBar.speed * this.rhythmBar.dir * dt;
@@ -706,9 +962,39 @@ export class Game2 {
         this.rhythmBar.cursor = 0;
         this.rhythmBar.dir = 1;
       }
+      // Troll: kecepatan naik tiap 25% progress
+      this.rhythmBar.speed = 2.6 + Math.floor(this.rhythmBar.progress / 25) * 0.7;
+    }
+
+    // PAYUNG BOSS (Fase 2) — boss buka payung, sandal dobel
+    if (this.payung.active && this.phase === 2) {
+      if (this.payung.up) {
+        this.payung.upDuration -= dt;
+        if (this.payung.upDuration <= 0) {
+          this.payung.up = false;
+          this.payung.timer = 7.0;
+          this.setDialog('MALAKOR: "Payung gua sobek katana sisa! Jangan jajan sandal murahan!"', 'boss', 2.5);
+        }
+      } else {
+        this.payung.timer -= dt;
+        // Boss kabur dari player pas payung mau dibuka
+        if (this.payung.timer < 3) {
+          const away = (this.player.x < this.boss.x) ? 1 : -1;
+          this.boss.x = Math.max(120, Math.min(this.width - 160, this.boss.x + away * 130 * dt));
+        }
+        if (this.payung.timer <= 0) {
+          this.payung.up = true;
+          this.payung.upDuration = 4.0;
+          this.payung.repelled = 0;
+          this.playSqueakSound();
+          this.setDialog('MALAKOR: "PAYUNG EMBLEM! Sandal gua pantulin balik dah!"', 'boss', 3);
+        }
+      }
     }
 
     // Player Status Effects (Slip on Banana / Stun)
+    if (this.player.hurtTimer > 0) this.player.hurtTimer -= dt;
+    if (this.boss.hurtFlash > 0) this.boss.hurtFlash -= dt;
     if (this.player.slipTimer > 0) {
       this.player.slipTimer -= dt;
       this.player.vx = this.player.facing * -250;
@@ -784,7 +1070,7 @@ export class Game2 {
 
         if (this.tahuBulat.x > this.width + 300) {
           this.tahuBulat.x = -350;
-          this.tahuBulat.timer = Math.random() * 6 + 10; // Lewat lagi 10-16 detik
+          this.tahuBulat.timer = Math.random() * 6 + 7; // Lewat lagi 7-13 detik (makin sering!)
           this.tahuBulat.warning = false;
         }
       }
@@ -816,6 +1102,47 @@ export class Game2 {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.rot += p.rotSpeed * dt;
+
+        // Payung boss kebuka: sandal dipantulin balik!
+        if (this.payung.up && Math.abs(p.x - (this.boss.x + 45)) < 70 && Math.abs(p.y - (this.boss.y + 20)) < 60) {
+          this.playSqueakSound();
+          this.spawnSparks(p.x, p.y, '#B0BEC5', 10);
+          this.projectiles.splice(i, 1);
+          this.payung.repelled++;
+          // Sandal balik ke muka player (troll!)
+          this.projectiles.push({
+            type: 'sandal_homing',
+            x: this.boss.x + 45,
+            y: this.boss.y + 20,
+            vx: (this.player.x - this.boss.x) * 2.2,
+            vy: -420,
+            rot: 0,
+            rotSpeed: 22,
+            isReflected: true
+          });
+          continue;
+        }
+
+        // Sandal pantulan mengenai player
+        if (p.isReflected && Math.abs(p.x - (this.player.x + 30)) < 32 && Math.abs(p.y - (this.player.y + 45)) < 45) {
+          this.player.hp = Math.max(0, this.player.hp - 8);
+          this.playSqueakSound();
+          this.screenShake = 6;
+          this.setDialog('KAMU: "KENA SANDAL SENDIRI?! SIALAN PAYUNG EMBLEM!"', 'player', 2);
+          this.projectiles.splice(i, 1);
+          if (this.player.hp <= 0) this.triggerGameOver('Terk Concek sandal pantulan payung emblem sendiri.');
+          continue;
+        }
+
+        // Sandal kena gelas ES TEH: gelas pecah, boss nangis (heal gagal total)
+        if (this.esTeh.active && this.phase === 1 && Math.abs(p.x - this.esTeh.x) < 34 && Math.abs(p.y - this.esTeh.y) < 40) {
+          this.playBonkSound();
+          this.spawnSparks(this.esTeh.x, this.esTeh.y, '#4FC3F7', 24);
+          this.projectiles.splice(i, 1);
+          this.esTeh.shardHits++;
+          this.setDialog('MALAKOR: "GLASSNYA PECAH?! Duh, itu gelas solo kondang jg!"', 'boss', 2.5);
+          continue;
+        }
 
         if (Math.abs(p.x - (this.boss.x + 45)) < 45 && Math.abs(p.y - (this.boss.y + 50)) < 50) {
           this.playSqueakSound();
@@ -858,10 +1185,16 @@ export class Game2 {
 
         if (Math.abs(p.x - (this.player.x + 30)) < 35 && Math.abs(p.y - (this.player.y + 45)) < 45) {
           this.player.stunTimer = 1.5;
-          this.player.hp = Math.max(0, this.player.hp - 15);
+          this.player.hp = Math.max(0, this.player.hp - (p.isMakro ? 22 : 15));
           this.playBonkSound();
+          if (p.isMakro) {
+            this.setDialog('MALAKOR: "ITULOH TAGIHAN MAKRO 10 JUTA! Bunga harian bang!"', 'boss', 2.5);
+            this.screenShake = 12;
+          }
           this.projectiles.splice(i, 1);
-          if (this.player.hp <= 0) this.triggerGameOver('Gagal melunasi tagihan paylater tepat waktu.');
+          if (this.player.hp <= 0) this.triggerGameOver(p.isMakro
+            ? 'Gagal melunasi tagihan paylater MAKRO 10 juta. Bunga harian 0.5%.'
+            : 'Gagal melunasi tagihan paylater tepat waktu.');
           continue;
         }
       }
@@ -962,7 +1295,7 @@ export class Game2 {
 
       // Pola Serangan Fase 2 (Shuriken + Kulit Pisang)
       else if (this.phase === 2) {
-        // Lempar Shuriken
+        // Lempar Shuriken (lebih sering kalau payung belum kebuka)
         this.projectiles.push({
           type: 'shuriken',
           x: b.x + (b.facing * 30),
@@ -971,16 +1304,33 @@ export class Game2 {
           vy: 0,
           rot: 0, rotSpeed: 20
         });
+        if (!this.payung.up) {
+          // Dua shurikan beruntun (kedua dikirim 250ms kemudian)
+          setTimeout(() => {
+            if (this.phase === 2 && !this.gameOver) {
+              this.projectiles.push({
+                type: 'shuriken',
+                x: b.x + (b.facing * 30),
+                y: b.y + 45,
+                vx: b.facing * 560,
+                vy: 0,
+                rot: 0, rotSpeed: 20
+              });
+            }
+          }, 250);
+        }
         // Jatuhkan Kulit Pisang di Lantai
         if (this.bananaPeels.length < 3) {
           this.bananaPeels.push({ x: Math.random() * (this.width - 300) + 150, y: 590 });
         }
       }
 
-      // Pola Serangan Fase 3 (Ayunan Bar Darah Baseball)
-      else if (this.phase === 3) {
-        this.playSwordSlashSound();
-        this.screenShake = 8;
+    // Boss baseball hit pakai animasi serang sheet
+    else if (this.phase === 3) {
+      b.isAttacking = true;
+      setTimeout(() => { b.isAttacking = false; }, 450);
+      this.playSwordSlashSound();
+      this.screenShake = 8;
         const curDist = Math.abs((b.x + 45) - (this.player.x + 30));
         if (curDist < 170 && this.player.y > 440) {
           this.player.hp = Math.max(0, this.player.hp - 25);
@@ -1002,6 +1352,20 @@ export class Game2 {
             rot: 0, rotSpeed: 6
           });
         }
+        // Tagihan makro 10 juta: lebih besar, lebih cepet, lebih nyebelin
+        setTimeout(() => {
+          if (this.phase === 4 && !this.gameOver) {
+            this.projectiles.push({
+              type: 'tagihan_paylater',
+              x: b.x - 20,
+              y: b.y + 10,
+              vx: -620,
+              vy: 0,
+              rot: 0, rotSpeed: 9,
+              isMakro: true
+            });
+          }
+        }, 400);
       }
     }
   }
@@ -1023,7 +1387,21 @@ export class Game2 {
     this.gameOver = true;
     this.screenShake = 18;
     this.playBonkSound();
-    this.deathReason = reason || 'Ksatria gugur dalam pertempuran.';
+    // Death reason kocak random kalau kosong / troll sprinkle
+    const absurdReasons = [
+      'Meninggal sambil mikirin "kira-kira besok gajian nggak ya?".',
+      'Terlempar ke dimensi lain karena salah tebasan. Bukan salah lu kok.',
+      'Boss lapor HRD karena kekerasan di tempat kerja (arena).',
+      'Gugur, tapi ES TEH-nya masih utuh. Kasihan.',
+      'Kalah lawan boss, menang lawan ngantuk.'
+    ];
+    this.deathReason = (reason || 'Ksatria gugur dalam pertempuran.') + ' ' + absurdReasons[Math.floor(Math.random() * absurdReasons.length)];
+  }
+
+  // RESTART TOTAL — dipanggil tombol restart UI & tombol [R]
+  resetGame() {
+    this.checkpointPhase = 1;
+    this.resetToCheckpoint(1);
   }
 
   // ========================================================================
@@ -1090,6 +1468,64 @@ export class Game2 {
       ctx.beginPath();
       ctx.ellipse(peel.x, peel.y, 14, 6, -0.2, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // RENDER GELAS ES TEH TROLL (Fase 1)
+    if (this.esTeh.active && this.phase === 1) {
+      const t = this.esTeh;
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      // Gelas plastik bening
+      ctx.fillStyle = 'rgba(79, 195, 247, 0.55)';
+      ctx.beginPath();
+      ctx.moveTo(-16, -30); ctx.lineTo(16, -30); ctx.lineTo(12, 10); ctx.lineTo(-12, 10);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2;
+      ctx.stroke();
+      // Teh nanggung (2/3)
+      ctx.fillStyle = '#8D6E63';
+      ctx.fillRect(-13, -12, 26, 20);
+      // Es batu
+      ctx.fillStyle = 'rgba(224, 247, 250, 0.9)';
+      ctx.fillRect(-8, -20, 9, 9);
+      ctx.fillRect(2, -8, 8, 8);
+      // Sedotan
+      ctx.strokeStyle = '#D500F9'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(6, -30); ctx.lineTo(12, -46); ctx.stroke();
+      // Tutup kedap-kedip warna warning
+      const blink = Math.sin(this.phaseTimer * 10) > 0;
+      ctx.strokeStyle = (t.timer <= 6 && blink) ? '#FF1744' : 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-18, -32, 36, 4);
+      ctx.restore();
+      // Label kocak
+      ctx.font = "bold 11px 'Inter', sans-serif";
+      ctx.fillStyle = '#80DEEA';
+      ctx.textAlign = 'center';
+      ctx.fillText('ES TEH (JANGAN DISENTUH!)', t.x, t.y + 28);
+    }
+
+    // RENDER PAYUNG BOSS (Fase 2)
+    if (this.payung.active && this.phase === 2) {
+      const py = this.payung;
+      ctx.save();
+      ctx.translate(this.boss.x + (this.boss.facing === 1 ? 95 : -5), this.boss.y + 26);
+      if (py.up) {
+        // Payung terbuka penuh (pantul sandal)
+        ctx.fillStyle = '#D500F9';
+        ctx.beginPath(); ctx.arc(0, -6, 42, Math.PI, 0); ctx.fill();
+        ctx.strokeStyle = '#FFEB3B'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, -6, 42, Math.PI, 0); ctx.stroke();
+        ctx.font = "bold 10px 'Inter', sans-serif";
+        ctx.fillStyle = '#FFEB3B';
+        ctx.textAlign = 'center';
+        ctx.fillText('EMBLEM', 0, -14);
+      } else {
+        // Payung tertutup
+        ctx.fillStyle = '#7B1FA2';
+        ctx.beginPath(); ctx.roundRect(0, -26, 10, 40, 4); ctx.fill();
+      }
+      ctx.restore();
     }
 
     // RENDER MOBIL TAHU BULAT
@@ -1267,6 +1703,32 @@ export class Game2 {
 
   renderPlayer(ctx) {
     const p = this.player;
+    // SPRITE PIXEL ART (Shinobi sheet) — fallback ke vector kalau sheet belum load
+    if (this.spritesReady && this._drawSprite(ctx, 'player', p.x - 20, p.y - 8, 98, 98, p.facing, p.slipTimer > 0 ? '#FFEB3B' : null)) {
+      // Senjata di tangan: katana / kangkung tetap digambar overlay biar jelas
+      const sway = p.isGrounded ? Math.sin(this.phaseTimer * 6) * 1.5 : 0;
+      const handX = p.facing === 1 ? p.x + 46 : p.x + 14;
+      const handY = p.y + 40 + sway;
+      ctx.save();
+      if (p.weapon === 'katana') {
+        ctx.shadowColor = '#00E5FF'; ctx.shadowBlur = 10;
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(handX, handY);
+        ctx.lineTo(p.facing === 1 ? handX + 50 : handX - 50, handY - 4);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = '#4CAF50'; ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(handX, handY);
+        ctx.quadraticCurveTo(p.facing === 1 ? handX + 25 : handX - 25, handY + 20, p.facing === 1 ? handX + 35 : handX - 35, handY + 12);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+
+    // FALLBACK: vector original
     ctx.save();
     ctx.translate(p.x, p.y);
 
@@ -1329,6 +1791,42 @@ export class Game2 {
 
   renderBoss(ctx) {
     const b = this.boss;
+
+    // SPRITE PIXEL ART (Samurai sheet) — UKURAN BESAR (1.7x player)
+    if (this.spritesReady && this._drawSprite(ctx, 'boss', b.x - 28, b.y - 46, 172, 172, b.facing, b.hurtFlash > 0 ? '#FFFFFF' : null)) {
+      // Overlay bar darah baseball + payung tetap digambar
+      if (b.holdsHealthBar) {
+        ctx.save();
+        ctx.fillStyle = '#D500F9';
+        ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(b.facing === -1 ? b.x - 110 : b.x + 90, b.y + 40, 150, 26, 6);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#FFEB3B';
+        ctx.font = "bold 10px 'Inter', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('HP 999Jt', b.facing === -1 ? b.x - 35 : b.x + 165, b.y + 57);
+        ctx.restore();
+      }
+      // Payung emblem di tangan boss
+      if (this.payung.active && this.phase === 2) {
+        ctx.save();
+        ctx.translate(b.x + (b.facing === 1 ? 130 : -50), b.y + 70);
+        if (this.payung.up) {
+          ctx.fillStyle = '#D500F9';
+          ctx.beginPath(); ctx.arc(0, -10, 34, Math.PI, 0); ctx.fill();
+          ctx.strokeStyle = '#FFEB3B'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(0, -10, 34, Math.PI, 0); ctx.stroke();
+        } else {
+          ctx.fillStyle = '#7B1FA2';
+          ctx.beginPath(); ctx.roundRect(-4, -22, 9, 34, 4); ctx.fill();
+        }
+        ctx.restore();
+      }
+      return;
+    }
+
+    // FALLBACK: vector original (lebih besar dari sebelumnya)
     ctx.save();
     ctx.translate(b.x, b.y);
 
@@ -1383,9 +1881,22 @@ export class Game2 {
       if (p.type === 'sandal_homing') {
         ctx.fillStyle = '#00E676'; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.roundRect(-20, -10, 40, 20, 6); ctx.fill(); ctx.stroke();
+        if (p.isReflected) {
+          ctx.fillStyle = '#FF1744';
+          ctx.font = "bold 10px 'Inter', sans-serif";
+          ctx.fillText('PANTUL!', -18, -16);
+        }
       } else if (p.type === 'tagihan_paylater') {
-        ctx.fillStyle = '#FFF8E1'; ctx.strokeStyle = '#D50000'; ctx.lineWidth = 2;
-        ctx.fillRect(-25, -15, 50, 30); ctx.strokeRect(-25, -15, 50, 30);
+        const w = p.isMakro ? 80 : 50;
+        const h = p.isMakro ? 46 : 30;
+        ctx.fillStyle = '#FFF8E1'; ctx.strokeStyle = '#D50000'; ctx.lineWidth = p.isMakro ? 4 : 2;
+        ctx.fillRect(-w / 2, -h / 2, w, h); ctx.strokeRect(-w / 2, -h / 2, w, h);
+        if (p.isMakro) {
+          ctx.fillStyle = '#D50000';
+          ctx.font = "900 11px 'Inter', sans-serif";
+          ctx.textAlign = 'center';
+          ctx.fillText('RP 10JT!', 0, 4);
+        }
       } else if (p.type === 'gayung') {
         ctx.fillStyle = '#FF1744';
         ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI); ctx.fill();
@@ -1462,19 +1973,21 @@ export class Game2 {
     ctx.fillStyle = '#00E5FF';
 
     if (this.phase === 1) {
-      ctx.fillText(`Fase 1: Kuras Darah Boss hingga 700 HP (Sisa: ${this.boss.hp})`, this.width / 2, 120);
+      ctx.fillText(`Fase 1: Kuras Darah Boss ke 700 HP (Sisa: ${this.boss.hp}) — Jangan biarin dia nyeruput ES TEH!`, this.width / 2, 120);
     } else if (this.phase === 2) {
-      ctx.fillText(`Fase 2: Lempar Sandal Swallow ke Boss (${this.phaseObjectives.phase2SandalHits}/${this.phaseObjectives.phase2SandalTarget})`, this.width / 2, 120);
+      ctx.fillText(`Fase 2: Lempar Sandal Swallow ke Boss (${this.phaseObjectives.phase2SandalHits}/${this.phaseObjectives.phase2SandalTarget}) — [F] Jemput Payung!`, this.width / 2, 120);
     } else if (this.phase === 3) {
-      ctx.fillText(`Fase 3: Siram Boss dengan Gayung Air (${this.phaseObjectives.phase3GayungHits}/${this.phaseObjectives.phase3GayungTarget})`, this.width / 2, 120);
+      ctx.fillText(`Fase 3: Siram Boss dengan Gayung Air (${this.phaseObjectives.phase3GayungHits}/${this.phaseObjectives.phase3GayungTarget}) — Awas mobil Tahu Bulat!`, this.width / 2, 120);
     } else if (this.phase === 4) {
       ctx.fillText(`Fase 4: Hindari Tagihan Paylater! Bertahan: ${Math.ceil(this.phaseObjectives.phase4SurvivalTimer)}s`, this.width / 2, 120);
+    } else if (this.phase === 5) {
+      ctx.fillText(`Fase 5: Kerokan Punggung Boss (${Math.floor(this.rhythmBar.progress)}%) — Combo x5 = Bonus!`, this.width / 2, 120);
     }
 
     // Controls Hint
     ctx.font = "12px 'Inter', sans-serif";
     ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.fillText("[A/D] Gerak  •  [W / Spasi] Lompat  •  [J] Serang / Lempar  •  [L] Parry  •  [Shift / K] Dash / Minigame", this.width / 2, this.height - 24);
+    ctx.fillText("[A/D] Gerak  •  [W / Spasi] Lompat  •  [J] Serang / Lempar  •  [L] Parry  •  [Shift / K] Dash / Minigame  •  [F] Jemput Payung", this.width / 2, this.height - 24);
 
     ctx.restore();
   }
@@ -1520,6 +2033,17 @@ export class Game2 {
     ctx.fillStyle = '#00E5FF';
     ctx.fillText(`Tekan [SPASI] untuk Mengulang dari Checkpoint Fase ${this.checkpointPhase} 🚩`, this.width / 2, this.height / 2 + 70);
 
+    // Quip kocak di bawah game over
+    ctx.font = "600 13px 'Inter', sans-serif";
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    const quips = [
+      'Fun fact: Boss juga nggak bener-bener mati, cuma rebutan.',
+      'Checkpoint ini disponsori oleh Tahu Bulat 500-an.',
+      'Sambil nunggu respawn, jangan lupa minum ES TEH... eh jangan, itu punya boss.',
+      'Boss nulis laporan kejadian: "Kemenangan mudah, lawan lemah." 😤'
+    ];
+    ctx.fillText(quips[Math.floor(Math.random() * quips.length)], this.width / 2, this.height / 2 + 108);
+
     ctx.restore();
   }
 
@@ -1557,5 +2081,11 @@ export class Game2 {
     ctx.font = "14px 'Inter', sans-serif";
     ctx.fillStyle = '#80DEEA';
     ctx.fillText("Tekan [SPASI] untuk Mengulang Seluruh Permainan dari Awal", this.width / 2, 350);
+
+    // Credits absurd
+    ctx.font = "12px 'Inter', sans-serif";
+    ctx.fillStyle = 'rgba(255, 224, 130, 0.7)';
+    ctx.fillText("Filmed on location di RT 04. Tidak ada kangkung yang terluka dalam pembuatan game ini.", this.width / 2, 400);
+    ctx.fillText("Sponsor: Warung ES TEH Barokah & Tahu Bulat Mak Ijah 🧋🛻", this.width / 2, 424);
   }
 }
